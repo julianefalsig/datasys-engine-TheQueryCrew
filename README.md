@@ -10,7 +10,7 @@ A small SQL engine built for ITU’s *How to Build Data Systems* (Fall 2026), te
 
 | File | Role |
 |---|---|
-| `src/main/java/dk/itu/datasys/Engine.java` | Process entrypoint (`mvn exec:java`). Currently prints the team name and sets up logging. |
+| `src/main/java/dk/itu/datasys/Engine.java` | Process entrypoint (`mvn compile exec:java`). Runs the three golden trips queries. |
 
 ### `dk.itu.datasys.storage`
 
@@ -60,6 +60,7 @@ flowchart TD
     ValueCodec
     ColumnType
   end
+  Engine --> StorageEngine
   StorageEngine --> CatalogStore
   StorageEngine --> CatalogData
   StorageEngine --> PartitionFile
@@ -81,4 +82,4 @@ flowchart TD
   ColumnStats --> ColumnType
 ```
 
-`Engine` does not depend on `storage` yet; wiring the demo queries into `main` is a later exercise step.
+`mvn compile exec:java` loads `src/test/resources/trips.csv` and prints the three golden queries.
