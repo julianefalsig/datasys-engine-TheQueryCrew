@@ -2,6 +2,8 @@
 
 A small SQL engine built for ITU’s *How to Build Data Systems* (Fall 2026), team **The Query Crew**. The stack is Java 25 and Maven. Right now the public storage API can create a table, `COPY` a headerless CSV into a custom columnar binary format, and `SELECT` with partition min/max pruning. Catalogs are JSON (Jackson); data files are our own binary format.
 
+`mvn test` runs `*Test` unit tests (Surefire). `mvn verify` also runs `*IT` integration tests (Failsafe).
+
 ## Java files
 
 ### `dk.itu.datasys`
@@ -32,7 +34,12 @@ A small SQL engine built for ITU’s *How to Build Data Systems* (Fall 2026), te
 | File | Role |
 |---|---|
 | `src/test/java/dk/itu/datasys/EngineTest.java` | Unit test for the team-name helper. |
+| `src/test/java/dk/itu/datasys/storage/ValueCodecTest.java` | Encode/decode round trip per column type. |
+| `src/test/java/dk/itu/datasys/storage/ColumnStatsTest.java` | Min/max over a column. |
+| `src/test/java/dk/itu/datasys/storage/PrunerTest.java` | Partition prune-or-read decisions. |
+| `src/test/java/dk/itu/datasys/storage/CsvParserTest.java` | Headerless CSV line parsing. |
 | `src/test/java/dk/itu/datasys/storage/StorageEngineSmokeTest.java` | End-to-end smoke test on the golden `trips.csv` data. |
+| `src/test/java/dk/itu/datasys/storage/StorageEngineIT.java` | Required Exercise 2 integration tests against `StorageEngine`. |
 
 ## File dependencies
 
