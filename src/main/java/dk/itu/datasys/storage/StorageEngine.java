@@ -2,6 +2,7 @@ package dk.itu.datasys.storage;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -14,6 +15,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class StorageEngine {
@@ -31,6 +33,7 @@ public final class StorageEngine {
     }
 
     public StorageEngine(Path dataDirectory, int defaultMaxRowsPerPartition) {
+        ensureLogContext();
         this.dataDirectory = dataDirectory;
         this.defaultMaxRowsPerPartition = defaultMaxRowsPerPartition;
         try {
@@ -39,6 +42,20 @@ public final class StorageEngine {
             throw new UncheckedIOException(e);
         }
         loadCatalogs();
+    }
+
+    /**
+     * Fills in the two MDC fields the CSV log layout expects, so every line has all seven values
+     * even when the engine is driven directly from a test instead of through {@code Engine.main}.
+     * An existing session is left alone: the caller's id wins.
+     */
+    private static void ensureLogContext() {
+        if (MDC.get("sessionId") == null) {
+            MDC.put("sessionId", UUID.randomUUID().toString().substring(0, 8));
+        }
+        if (MDC.get("statementNumber") == null) {
+            MDC.put("statementNumber", "0");
+        }
     }
 
     private void loadCatalogs() {
