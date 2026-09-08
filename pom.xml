@@ -69,6 +69,21 @@
                 <version>3.5.6</version>
             </plugin>
 
+            <!-- Runs *IT classes during `mvn verify` (Surefire only runs *Test) -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>3.5.6</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
             <!-- Lets `mvn exec:java` start the engine -->
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
