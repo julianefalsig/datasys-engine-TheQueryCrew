@@ -18,12 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * Asserts the logging contract on the real log file that log4j2.xml writes, rather than on an
- * in-memory appender: the backend is a runtime-only dependency, and the file layout is what the
- * engine has to be able to COPY back in later. Each test tags its own session id into the MDC so it
- * can pick its own lines out of the shared logs/engine.log.
- */
+
 class StorageEngineLoggingIT {
 
     private static final Path LOG_FILE = Path.of("logs", "engine.log");
@@ -107,13 +102,11 @@ class StorageEngineLoggingIT {
         assertEquals(1, countMessagesContaining("const=Copen;hagen partitionsRead="));
     }
 
-    /** Every line this test's session wrote, split into the seven fields the CSV layout promises. */
     private List<String[]> myLogLines() throws IOException {
         List<String[]> mine = new ArrayList<>();
         for (String line : Files.readAllLines(LOG_FILE)) {
             String[] fields = line.split(",", -1);
-            // field 1 is sessionId; a line that split into too many fields still lands here, so the
-            // seven-field assertion above is the one that catches an unescaped comma.
+            
             if (fields.length >= 2 && fields[1].equals(sessionId)) {
                 mine.add(fields);
             }

@@ -46,11 +46,7 @@ public final class StorageEngine {
         }
     }
 
-    /**
-     * Fills in the two MDC fields the CSV log layout expects, so every line has all seven values
-     * even when the engine is driven directly from a test instead of through {@code Engine.main}.
-     * An existing session is left alone: the caller's id wins.
-     */
+  
     private static void ensureLogContext() {
         if (MDC.get("sessionId") == null) {
             MDC.put("sessionId", UUID.randomUUID().toString().substring(0, 8));
@@ -229,23 +225,13 @@ public final class StorageEngine {
         return lastScanStats;
     }
 
-    /**
-     * Writes the ERROR line that a failed API call owes the log, then hands the exception back so the
-     * caller can {@code throw} it. Without this, a call that throws leaves no line in the log at all:
-     * every per-call summary line sits at the end of the happy path.
-     */
+
     private static <E extends RuntimeException> E failed(String op, String context, E e) {
         LOGGER.error("op={} {} outcome=FAILED error={} message={}",
                 op, csvSafe(context), e.getClass().getSimpleName(), csvSafe(e.getMessage()));
         return e;
     }
 
-    /**
-     * Keeps a log line at exactly seven CSV fields. Everything we interpolate can carry a comma or a
-     * newline that our own {@code COPY} would read as a field or row break: exception messages
-     * ("expected 3, got 4"), table and file names, and STRING data values such as a min/max or a
-     * predicate constant.
-     */
     private static String csvSafe(Object value) {
         return value == null ? "none" : String.valueOf(value).replace(',', ';').replaceAll("\\s+", " ");
     }
