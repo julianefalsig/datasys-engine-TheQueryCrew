@@ -38,10 +38,12 @@ public final class StorageEngine {
         this.defaultMaxRowsPerPartition = defaultMaxRowsPerPartition;
         try {
             Files.createDirectories(dataDirectory);
+            loadCatalogs();
         } catch (IOException e) {
-            throw new UncheckedIOException(e);
+            throw failed("open", "dir=" + dataDirectory, new UncheckedIOException(e));
+        } catch (RuntimeException e) {
+            throw failed("open", "dir=" + dataDirectory, e);
         }
-        loadCatalogs();
     }
 
     /**
@@ -71,49 +73,58 @@ public final class StorageEngine {
     }
 
     public void createTable(String tableName, List<ColumnSpec> columns) {
-        if (catalogs.containsKey(tableName)) {
-            throw new IllegalArgumentException("table already exists: " + tableName);
-        }
-        if (columns.isEmpty()) {
-            throw new IllegalArgumentException("a table needs at least one column");
-        }
-        long distinctNames = columns.stream().map(ColumnSpec::name).distinct().count();
-        if (distinctNames != columns.size()) {
-            throw new IllegalArgumentException("duplicate column names in schema for table: " + tableName);
-        }
+        try {
+            if (catalogs.containsKey(tableName)) {
+                throw new IllegalArgumentException("table already exists: " + tableName);
+            }
+            if (columns.isEmpty()) {
+                throw new IllegalArgumentException("a table needs at least one column");
+            }
+            long distinctNames = columns.stream().map(ColumnSpec::name).distinct().count();
+            if (distinctNames != columns.size()) {
+                throw new IllegalArgumentException("duplicate column names in schema for table: " + tableName);
+            }
 
-        CatalogData catalog = new CatalogData();
-        catalog.maxRowsPerPartition = defaultMaxRowsPerPartition;
-        catalog.columns.addAll(List.copyOf(columns));
+            CatalogData catalog = new CatalogData();
+            catalog.maxRowsPerPartition = defaultMaxRowsPerPartition;
+            catalog.columns.addAll(List.copyOf(columns));
 
-        CatalogStore.write(tableDirectory(tableName), catalog);
-        catalogs.put(tableName, catalog);
-        LOGGER.debug("op=createTable table={} columns={}", tableName, columns.size());
+            CatalogStore.write(tableDirectory(tableName), catalog);
+            catalogs.put(tableName, catalog);
+            LOGGER.debug("op=createTable table={} columns={}", csvSafe(tableName), columns.size());
+        } catch (RuntimeException e) {
+            throw failed("createTable", "table=" + tableName, e);
+        }
     }
 
     public void copyFile(String tableName, String csvFilePath) {
         long start = System.currentTimeMillis();
-        CatalogData catalog = requireCatalog(tableName);
-        if (!catalog.partitions.isEmpty()) {
-            throw new UnsupportedOperationException(
-                    "table " + tableName + " already has data; appending is not supported yet");
+        try {
+            CatalogData catalog = requireCatalog(tableName);
+            if (!catalog.partitions.isEmpty()) {
+                throw new UnsupportedOperationException(
+                        "table " + tableName + " already has data; appending is not supported yet");
+            }
+
+            List<ColumnSpec> columns = catalog.columns;
+            List<Object[]> rows = readCsv(csvFilePath, columns);
+
+            int partitionIndex = 0;
+            for (int rowStart = 0; rowStart < rows.size(); rowStart += catalog.maxRowsPerPartition) {
+                int rowEnd = Math.min(rowStart + catalog.maxRowsPerPartition, rows.size());
+                writePartition(tableName, catalog, columns, rows.subList(rowStart, rowEnd), partitionIndex);
+                partitionIndex++;
+            }
+
+            CatalogStore.write(tableDirectory(tableName), catalog);
+
+            long durationMs = System.currentTimeMillis() - start;
+            LOGGER.debug("op=copyFile table={} file={} rows={} partitions={} durationMs={}",
+                    csvSafe(tableName), csvSafe(csvFilePath), rows.size(), partitionIndex, durationMs);
+        } catch (RuntimeException e) {
+            throw failed("copyFile", "table=%s file=%s durationMs=%d"
+                    .formatted(tableName, csvFilePath, System.currentTimeMillis() - start), e);
         }
-
-        List<ColumnSpec> columns = catalog.columns;
-        List<Object[]> rows = readCsv(csvFilePath, columns);
-
-        int partitionIndex = 0;
-        for (int rowStart = 0; rowStart < rows.size(); rowStart += catalog.maxRowsPerPartition) {
-            int rowEnd = Math.min(rowStart + catalog.maxRowsPerPartition, rows.size());
-            writePartition(tableName, catalog, columns, rows.subList(rowStart, rowEnd), partitionIndex);
-            partitionIndex++;
-        }
-
-        CatalogStore.write(tableDirectory(tableName), catalog);
-
-        long durationMs = System.currentTimeMillis() - start;
-        LOGGER.debug("op=copyFile table={} file={} rows={} partitions={} durationMs={}",
-                tableName, csvFilePath, rows.size(), partitionIndex, durationMs);
     }
 
     private void writePartition(String tableName, CatalogData catalog, List<ColumnSpec> columns,
@@ -138,77 +149,105 @@ public final class StorageEngine {
             ColumnStats stats = ColumnStats.of(columnData.get(c), column.type());
             statsByColumn.put(column.name(), new CatalogData.Range(stats.min, stats.max));
             LOGGER.debug("op=copyFile table={} partition={} column={} min={} max={}",
-                    tableName, partitionIndex, column.name(), stats.min, stats.max);
+                    csvSafe(tableName), partitionIndex, csvSafe(column.name()), csvSafe(stats.min), csvSafe(stats.max));
         }
         catalog.partitions.add(new CatalogData.Partition(dataFileName, partitionRows.size(), statsByColumn));
     }
 
     public List<Object[]> select(String tableName, String columnName, Comparison comparison, Object constant) {
         long start = System.currentTimeMillis();
-        CatalogData catalog = requireCatalog(tableName);
-        List<ColumnSpec> columns = catalog.columns;
+        try {
+            CatalogData catalog = requireCatalog(tableName);
+            List<ColumnSpec> columns = catalog.columns;
 
-        int predicateIndex = -1;
-        ColumnSpec predicateColumn = null;
-        for (int i = 0; i < columns.size(); i++) {
-            if (columns.get(i).name().equals(columnName)) {
-                predicateIndex = i;
-                predicateColumn = columns.get(i);
-                break;
-            }
-        }
-        if (predicateColumn == null) {
-            throw new IllegalArgumentException("unknown column: " + columnName + " on table " + tableName);
-        }
-        requireMatchingType(predicateColumn, constant);
-
-        List<Object[]> results = new ArrayList<>();
-        int partitionsTotal = catalog.partitions.size();
-        int partitionsRead = 0;
-        int partitionsPruned = 0;
-
-        for (int p = 0; p < catalog.partitions.size(); p++) {
-            CatalogData.Partition entry = catalog.partitions.get(p);
-            CatalogData.Range stats = entry.stats().get(columnName);
-            Object min = stats.min();
-            Object max = stats.max();
-
-            boolean prune = Pruner.canPrune(comparison, constant, min, max, predicateColumn.type());
-            LOGGER.debug("op=select table={} column={} comparison={} const={} partition={} min={} max={} decision={}",
-                    tableName, columnName, comparison, constant, p, min, max, prune ? "PRUNED" : "READ");
-
-            if (prune) {
-                partitionsPruned++;
-                continue;
-            }
-            partitionsRead++;
-
-            List<List<Object>> partitionData =
-                    PartitionFile.readAllColumns(tableDirectory(tableName).resolve(entry.dataFile()), columns);
-
-            for (int r = 0; r < entry.rowCount(); r++) {
-                Object value = partitionData.get(predicateIndex).get(r);
-                if (matches(comparison, constant, value, predicateColumn.type())) {
-                    Object[] row = new Object[columns.size()];
-                    for (int c = 0; c < columns.size(); c++) {
-                        row[c] = partitionData.get(c).get(r);
-                    }
-                    results.add(row);
+            int predicateIndex = -1;
+            ColumnSpec predicateColumn = null;
+            for (int i = 0; i < columns.size(); i++) {
+                if (columns.get(i).name().equals(columnName)) {
+                    predicateIndex = i;
+                    predicateColumn = columns.get(i);
+                    break;
                 }
             }
+            if (predicateColumn == null) {
+                throw new IllegalArgumentException("unknown column: " + columnName + " on table " + tableName);
+            }
+            requireMatchingType(predicateColumn, constant);
+
+            List<Object[]> results = new ArrayList<>();
+            int partitionsTotal = catalog.partitions.size();
+            int partitionsRead = 0;
+            int partitionsPruned = 0;
+
+            for (int p = 0; p < catalog.partitions.size(); p++) {
+                CatalogData.Partition entry = catalog.partitions.get(p);
+                CatalogData.Range stats = entry.stats().get(columnName);
+                Object min = stats.min();
+                Object max = stats.max();
+
+                boolean prune = Pruner.canPrune(comparison, constant, min, max, predicateColumn.type());
+                LOGGER.debug("op=select table={} column={} comparison={} const={} partition={} min={} max={} decision={}",
+                        csvSafe(tableName), csvSafe(columnName), comparison, csvSafe(constant), p,
+                        csvSafe(min), csvSafe(max), prune ? "PRUNED" : "READ");
+
+                if (prune) {
+                    partitionsPruned++;
+                    continue;
+                }
+                partitionsRead++;
+
+                List<List<Object>> partitionData =
+                        PartitionFile.readAllColumns(tableDirectory(tableName).resolve(entry.dataFile()), columns);
+
+                for (int r = 0; r < entry.rowCount(); r++) {
+                    Object value = partitionData.get(predicateIndex).get(r);
+                    if (matches(comparison, constant, value, predicateColumn.type())) {
+                        Object[] row = new Object[columns.size()];
+                        for (int c = 0; c < columns.size(); c++) {
+                            row[c] = partitionData.get(c).get(r);
+                        }
+                        results.add(row);
+                    }
+                }
+            }
+
+            long durationMs = System.currentTimeMillis() - start;
+            lastScanStats = new ScanStats(partitionsTotal, partitionsRead, partitionsPruned);
+            LOGGER.debug("op=select table={} column={} comparison={} const={} partitionsRead={} partitionsPruned={} rowsOut={} durationMs={}",
+                    csvSafe(tableName), csvSafe(columnName), comparison, csvSafe(constant),
+                    partitionsRead, partitionsPruned, results.size(), durationMs);
+
+            return results;
+        } catch (RuntimeException e) {
+            throw failed("select", "table=%s column=%s comparison=%s const=%s durationMs=%d"
+                    .formatted(tableName, columnName, comparison, constant, System.currentTimeMillis() - start), e);
         }
-
-        long durationMs = System.currentTimeMillis() - start;
-        lastScanStats = new ScanStats(partitionsTotal, partitionsRead, partitionsPruned);
-        LOGGER.debug("op=select table={} column={} comparison={} const={} partitionsRead={} partitionsPruned={} rowsOut={} durationMs={}",
-                tableName, columnName, comparison, constant, partitionsRead, partitionsPruned, results.size(), durationMs);
-
-        return results;
     }
 
     /** Pruning stats from the most recent {@link #select}, so pruning decisions are observable beyond the log. */
     public ScanStats lastScanStats() {
         return lastScanStats;
+    }
+
+    /**
+     * Writes the ERROR line that a failed API call owes the log, then hands the exception back so the
+     * caller can {@code throw} it. Without this, a call that throws leaves no line in the log at all:
+     * every per-call summary line sits at the end of the happy path.
+     */
+    private static <E extends RuntimeException> E failed(String op, String context, E e) {
+        LOGGER.error("op={} {} outcome=FAILED error={} message={}",
+                op, csvSafe(context), e.getClass().getSimpleName(), csvSafe(e.getMessage()));
+        return e;
+    }
+
+    /**
+     * Keeps a log line at exactly seven CSV fields. Everything we interpolate can carry a comma or a
+     * newline that our own {@code COPY} would read as a field or row break: exception messages
+     * ("expected 3, got 4"), table and file names, and STRING data values such as a min/max or a
+     * predicate constant.
+     */
+    private static String csvSafe(Object value) {
+        return value == null ? "none" : String.valueOf(value).replace(',', ';').replaceAll("\\s+", " ");
     }
 
     private Path tableDirectory(String tableName) {
