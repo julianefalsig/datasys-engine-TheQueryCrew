@@ -1,6 +1,6 @@
 # datasys-engine-TheQueryCrew
 
-A small SQL engine built for ITU’s *How to Build Data Systems* (Fall 2026), team **The Query Crew**. The stack is Java 25 and Maven. Right now the public storage API can create a table, `COPY` a headerless CSV into a custom columnar binary format, and `SELECT` with partition min/max pruning. Catalogs are JSON (Jackson); data files are our own binary format.
+A small SQL engine built for ITU’s *How to Build Data Systems* (Fall 2026), team **The Query Crew**. The stack is Java 25 and Maven. ANTLR 4 generates the lexer/parser from `src/main/antlr4/dk/itu/datasys/sql/Sql.g4` on `mvn compile`; generated Java lands in `target/generated-sources/antlr4` and is not committed. SQL text parses to a typed AST (`CREATE TABLE` / `COPY` / `SELECT`); nothing executes from SQL yet. The storage API can create a table, `COPY` a headerless CSV into a custom columnar binary format, and `SELECT` with partition min/max pruning. Catalogs are JSON (Jackson); data files are our own binary format.
 
 `mvn test` runs `*Test` unit tests (Surefire). `mvn verify` also runs `*IT` integration tests (Failsafe).
 
@@ -11,6 +11,20 @@ A small SQL engine built for ITU’s *How to Build Data Systems* (Fall 2026), te
 | File | Role |
 |---|---|
 | `src/main/java/dk/itu/datasys/Engine.java` | Process entrypoint (`mvn compile exec:java`). Runs the three golden trips queries. |
+| `src/main/java/dk/itu/datasys/SqlParser.java` | Facade: SQL text → `List<Statement>`, or `SqlParseException` with line/column. |
+| `src/main/java/dk/itu/datasys/SqlParseException.java` | Syntax error from the lexer/parser (1-based line, 0-based column). |
+
+### `dk.itu.datasys.sql`
+
+| File | Role |
+|---|---|
+| `src/main/antlr4/dk/itu/datasys/sql/Sql.g4` | Grammar for the Exercise 3 SQL subset. Path under `antlr4/` is the generated Java package. |
+| `src/main/java/dk/itu/datasys/sql/SqlAstBuilder.java` | Visitor: ANTLR parse tree → AST records. Types literals as `String` / `Long` / `Double`. |
+| `src/main/java/dk/itu/datasys/sql/Statement.java` | Sealed AST root: `CreateTableStatement`, `CopyStatement`, `SelectStatement`. |
+| `src/main/java/dk/itu/datasys/sql/CreateTableStatement.java` | `CREATE TABLE` (name + `ColumnSpec` list). |
+| `src/main/java/dk/itu/datasys/sql/CopyStatement.java` | `COPY … FROM 'path'`. |
+| `src/main/java/dk/itu/datasys/sql/SelectStatement.java` | `SELECT * FROM …` with optional `WHERE`. |
+| `src/main/java/dk/itu/datasys/sql/Predicate.java` | `WHERE` column, `Comparison`, typed constant. |
 
 ### `dk.itu.datasys.storage`
 
@@ -46,6 +60,16 @@ A small SQL engine built for ITU’s *How to Build Data Systems* (Fall 2026), te
 ```mermaid
 flowchart TD
   Engine
+  SqlParser
+  SqlParseException
+  subgraph sqlPkg ["dk.itu.datasys.sql"]
+    SqlAstBuilder
+    Statement
+    CreateTableStatement
+    CopyStatement
+    SelectStatement
+    Predicate
+  end
   subgraph storagePkg ["dk.itu.datasys.storage"]
     StorageEngine
     CatalogStore
@@ -61,6 +85,16 @@ flowchart TD
     ColumnType
   end
   Engine --> StorageEngine
+  SqlParser --> SqlAstBuilder
+  SqlParser --> SqlParseException
+  SqlAstBuilder --> Statement
+  Statement --> CreateTableStatement
+  Statement --> CopyStatement
+  Statement --> SelectStatement
+  CreateTableStatement --> ColumnSpec
+  SelectStatement --> Predicate
+  Predicate --> Comparison
+  SqlAstBuilder --> ColumnType
   StorageEngine --> CatalogStore
   StorageEngine --> CatalogData
   StorageEngine --> PartitionFile
