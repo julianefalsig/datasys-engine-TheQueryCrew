@@ -10,7 +10,7 @@ A small SQL engine built for ITU’s *How to Build Data Systems* (Fall 2026), te
 
 | File | Role |
 |---|---|
-| `src/main/java/dk/itu/datasys/Engine.java` | Process entrypoint (`mvn compile exec:java`). Runs the three golden trips queries. |
+| `src/main/java/dk/itu/datasys/Engine.java` | Process entrypoint (`mvn compile exec:java`). Parses the four Task 1 statements and prints their pretty-printed form. |
 | `src/main/java/dk/itu/datasys/SqlParser.java` | Facade: SQL text → `List<Statement>`, or `SqlParseException` with line/column. |
 | `src/main/java/dk/itu/datasys/SqlParseException.java` | Syntax error from the lexer/parser (1-based line, 0-based column). |
 
@@ -20,6 +20,7 @@ A small SQL engine built for ITU’s *How to Build Data Systems* (Fall 2026), te
 |---|---|
 | `src/main/antlr4/dk/itu/datasys/sql/Sql.g4` | Grammar for the Exercise 3 SQL subset. Path under `antlr4/` is the generated Java package. |
 | `src/main/java/dk/itu/datasys/sql/SqlAstBuilder.java` | Visitor: ANTLR parse tree → AST records. Types literals as `String` / `Long` / `Double`. |
+| `src/main/java/dk/itu/datasys/sql/SqlPrinter.java` | AST → SQL text; `parse(print(s))` yields an equal statement. |
 | `src/main/java/dk/itu/datasys/sql/Statement.java` | Sealed AST root: `CreateTableStatement`, `CopyStatement`, `SelectStatement`. |
 | `src/main/java/dk/itu/datasys/sql/CreateTableStatement.java` | `CREATE TABLE` (name + `ColumnSpec` list). |
 | `src/main/java/dk/itu/datasys/sql/CopyStatement.java` | `COPY … FROM 'path'`. |
@@ -48,6 +49,7 @@ A small SQL engine built for ITU’s *How to Build Data Systems* (Fall 2026), te
 | File | Role |
 |---|---|
 | `src/test/java/dk/itu/datasys/EngineTest.java` | Unit test for the team-name helper. |
+| `src/test/java/dk/itu/datasys/sql/SqlPrinterTest.java` | Pretty-printer round-trip over every statement shape. |
 | `src/test/java/dk/itu/datasys/storage/ValueCodecTest.java` | Encode/decode round trip per column type. |
 | `src/test/java/dk/itu/datasys/storage/ColumnStatsTest.java` | Min/max over a column. |
 | `src/test/java/dk/itu/datasys/storage/PrunerTest.java` | Partition prune-or-read decisions. |
@@ -64,6 +66,7 @@ flowchart TD
   SqlParseException
   subgraph sqlPkg ["dk.itu.datasys.sql"]
     SqlAstBuilder
+    SqlPrinter
     Statement
     CreateTableStatement
     CopyStatement
@@ -84,8 +87,10 @@ flowchart TD
     ValueCodec
     ColumnType
   end
-  Engine --> StorageEngine
+  Engine --> SqlParser
+  Engine --> SqlPrinter
   SqlParser --> SqlAstBuilder
+  SqlPrinter --> Statement
   SqlParser --> SqlParseException
   SqlAstBuilder --> Statement
   Statement --> CreateTableStatement
@@ -116,4 +121,4 @@ flowchart TD
   ColumnStats --> ColumnType
 ```
 
-`mvn compile exec:java` loads `src/test/resources/trips.csv` and prints the three golden queries.
+`mvn compile exec:java` parses the four Task 1 statements and prints their pretty-printed form, one per line. Nothing executes yet.
