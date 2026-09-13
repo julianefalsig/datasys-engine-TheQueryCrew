@@ -220,6 +220,19 @@ public final class StorageEngine {
         }
     }
 
+    
+    //method used for the binder. The table's schema, in column order. Throws IllegalArgumentException if the table is unknown.
+
+    public List<ColumnSpec> schema(String tableName) {
+        try {
+            List<ColumnSpec> columns = List.copyOf(requireCatalog(tableName).columns);
+            LOGGER.debug("op=schema table={} columns={}", csvSafe(tableName), columns.size());
+            return columns;
+        } catch (RuntimeException e) {
+            throw failed("schema", "table=" + tableName, e);
+        }
+    }
+
     /** Pruning stats from the most recent {@link #select}, so pruning decisions are observable beyond the log. */
     public ScanStats lastScanStats() {
         return lastScanStats;
