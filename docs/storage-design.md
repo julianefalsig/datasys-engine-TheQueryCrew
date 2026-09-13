@@ -1,6 +1,8 @@
 1. **Catalog storage:** one catalog file or one per table? Which format: JSON, Java properties, or your own binary? Where on disk relative to the data directory?
 
     one catalog file per table in a subfolder named by the table name stored in JSON format.
+    We pick this option to keep each catalog file relatively small, avoiding reads / writes with huge files as well as lessening the contention. Also, this allows us to operate on each table file in isolation, leaving everything else untouched.
+    Keeping a subfolder for each table makes dropping tables easy, and makes management of all files relating to a table more straightforward. We use JSON as the format for our catalog as it is a common and human-readable representation of the state, which makes debugging and manual inspection easier.
 
 2. **Catalog contents:** per table, at least the schema and the list of data files and partitions that belong to it.
 
