@@ -3,6 +3,7 @@ package dk.itu.datasys.sql;
 import dk.itu.datasys.storage.ColumnSpec;
 import dk.itu.datasys.storage.Comparison;
 
+import java.math.BigDecimal;
 import java.util.stream.Collectors;
 
 public final class SqlPrinter {
@@ -50,12 +51,17 @@ public final class SqlPrinter {
     }
 
     private static String literal(Object constant) {
-        if (constant instanceof String text) {
-            return "'" + text + "'";
-        }
-        if (constant instanceof Long || constant instanceof Double) {
-            return constant.toString();
-        }
-        throw new IllegalStateException("unhandled literal type: " + constant.getClass().getName());
+        return switch (constant) {
+            case String text -> "'" + text + "'";
+            case Long number -> number.toString();
+            case Double number -> formatDouble(number);
+            default -> throw new IllegalStateException("unhandled literal type: " + constant.getClass().getName());
+        };
+    }
+
+    /** Grammar is `-`? digits `.` digits — never scientific notation, always a decimal point. */
+    private static String formatDouble(double value) {
+        String plain = BigDecimal.valueOf(value).toPlainString();
+        return plain.contains(".") ? plain : plain + ".0";
     }
 }
