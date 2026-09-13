@@ -1,8 +1,10 @@
 package dk.itu.datasys.sql;
 
 import dk.itu.datasys.SqlParser;
+import dk.itu.datasys.storage.Comparison;
 
 import java.util.List;
+import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 
@@ -28,5 +30,20 @@ class SqlPrinterTest {
             assertEquals(1, reprinted.size());
             assertEquals(statement, reprinted.get(0));
         }
+    }
+
+    @Test
+    void doubleLiteralAvoidsScientificNotation() {
+        Statement statement = new SelectStatement(
+                "trips",
+                Optional.of(new Predicate("price", Comparison.GREATER_THAN, 1.0e20)));
+        assertEquals(statement, roundTrip(statement));
+    }
+
+    private static Statement roundTrip(Statement statement) {
+        SqlParser parser = new SqlParser();
+        List<Statement> reprinted = parser.parse(new SqlPrinter().print(statement));
+        assertEquals(1, reprinted.size());
+        return reprinted.get(0);
     }
 }
