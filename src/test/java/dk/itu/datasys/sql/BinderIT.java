@@ -15,7 +15,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-class BinderTest {
+class BinderIT {
 
     private static final List<ColumnSpec> TRIPS_SCHEMA = List.of(
             new ColumnSpec("city", ColumnType.STRING),
