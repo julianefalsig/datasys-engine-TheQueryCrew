@@ -50,4 +50,42 @@ class BinderTest {
 
         assertDoesNotThrow(() -> binder.bind(new CopyStatement("trips", "does-not-exist.csv")));
     }
+
+    // Distinct column names and at least one of them: nothing for the binder to object to.
+    @Test
+    void createTableWithDistinctColumnsBinds(@TempDir Path dataDir) {
+        Binder binder = binderWithTrips(dataDir);
+
+        assertDoesNotThrow(() -> binder.bind(new CreateTableStatement("cities", List.of(
+                new ColumnSpec("name", ColumnType.STRING),
+                new ColumnSpec("population", ColumnType.LONG)))));
+    }
+
+    // Two columns called "city": the table could never be queried unambiguously.
+    @Test
+    void duplicateColumnNamesThrow(@TempDir Path dataDir) {
+        Binder binder = binderWithTrips(dataDir);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> binder.bind(new CreateTableStatement("cities", List.of(
+                        new ColumnSpec("city", ColumnType.STRING),
+                        new ColumnSpec("city", ColumnType.LONG)))));
+    }
+
+    // The grammar cannot produce this, but bind() takes any Statement, so it is checked anyway.
+    @Test
+    void anEmptyColumnListThrows(@TempDir Path dataDir) {
+        Binder binder = binderWithTrips(dataDir);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> binder.bind(new CreateTableStatement("cities", List.of())));
+    }
+
+    // "Already exists" is execution's concern, so re-creating trips must still bind cleanly.
+    @Test
+    void anExistingTableIsNotTheBindersProblem(@TempDir Path dataDir) {
+        Binder binder = binderWithTrips(dataDir);
+
+        assertDoesNotThrow(() -> binder.bind(new CreateTableStatement("trips", TRIPS_SCHEMA)));
+    }
 }
