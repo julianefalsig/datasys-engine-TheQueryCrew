@@ -1,5 +1,6 @@
 package dk.itu.datasys.sql;
 
+import dk.itu.datasys.storage.ColumnSpec;
 import dk.itu.datasys.storage.StorageEngine;
 
 //Checks a parsed statement against the catalog
@@ -17,8 +18,19 @@ public final class Binder {
         switch (statement) {
             // The file is execution's concern: it can appear or vanish between binding and running.
             case CopyStatement copy -> engine.schema(copy.tableName());
-            case CreateTableStatement create -> throw new UnsupportedOperationException("not bound yet");
+            case CreateTableStatement create -> bindCreateTable(create);
             case SelectStatement select -> throw new UnsupportedOperationException("not bound yet");
+        }
+    }
+
+    // Whether the table already exists is execution's concern: it checks and writes in one step.
+    private static void bindCreateTable(CreateTableStatement create) {
+        if (create.columns().isEmpty()) {
+            throw new IllegalArgumentException("a table needs at least one column: " + create.tableName());
+        }
+        long distinctNames = create.columns().stream().map(ColumnSpec::name).distinct().count();
+        if (distinctNames != create.columns().size()) {
+            throw new IllegalArgumentException("duplicate column names in schema for table: " + create.tableName());
         }
     }
 }
