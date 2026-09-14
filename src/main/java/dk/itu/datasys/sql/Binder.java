@@ -3,6 +3,8 @@ package dk.itu.datasys.sql;
 import dk.itu.datasys.storage.ColumnSpec;
 import dk.itu.datasys.storage.StorageEngine;
 
+import java.util.List;
+
 //Checks a parsed statement against the catalog
 
 public final class Binder {
@@ -19,7 +21,26 @@ public final class Binder {
             // The file is execution's concern: it can appear or vanish between binding and running.
             case CopyStatement copy -> engine.schema(copy.tableName());
             case CreateTableStatement create -> bindCreateTable(create);
-            case SelectStatement select -> throw new UnsupportedOperationException("not bound yet");
+            case SelectStatement select -> bindSelect(select);
+        }
+    }
+
+    // Without a WHERE there is nothing to check beyond the table itself.
+    private void bindSelect(SelectStatement select) {
+        List<ColumnSpec> schema = engine.schema(select.tableName());
+        if (select.where().isEmpty()) {
+            return;
+        }
+        Predicate predicate = select.where().get();
+        ColumnSpec column = schema.stream()
+                .filter(candidate -> candidate.name().equals(predicate.columnName()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "unknown column: " + predicate.columnName() + " on table " + select.tableName()));
+        if (!column.type().accepts(predicate.constant())) {
+            throw new IllegalArgumentException(
+                    "constant type %s does not match column %s of type %s"
+                            .formatted(predicate.constant().getClass().getSimpleName(), column.name(), column.type()));
         }
     }
 
