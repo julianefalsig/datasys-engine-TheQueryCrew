@@ -2,6 +2,7 @@ package dk.itu.datasys.sql;
 
 import dk.itu.datasys.storage.ColumnSpec;
 import dk.itu.datasys.storage.ColumnType;
+import dk.itu.datasys.storage.Comparison;
 import dk.itu.datasys.storage.StorageEngine;
 
 import org.junit.jupiter.api.Test;
@@ -9,6 +10,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -87,5 +89,51 @@ class BinderTest {
         Binder binder = binderWithTrips(dataDir);
 
         assertDoesNotThrow(() -> binder.bind(new CreateTableStatement("trips", TRIPS_SCHEMA)));
+    }
+
+    // No WHERE, so the table is the only thing there is to check.
+    @Test
+    void selectWithoutWhereBinds(@TempDir Path dataDir) {
+        Binder binder = binderWithTrips(dataDir);
+
+        assertDoesNotThrow(() -> binder.bind(new SelectStatement("trips", Optional.empty())));
+    }
+
+    // distance is a LONG column and 100L is a Long, so the predicate lines up.
+    @Test
+    void selectWithAMatchingPredicateBinds(@TempDir Path dataDir) {
+        Binder binder = binderWithTrips(dataDir);
+
+        assertDoesNotThrow(() -> binder.bind(new SelectStatement("trips",
+                Optional.of(new Predicate("distance", Comparison.GREATER_THAN, 100L)))));
+    }
+
+    // No such table, exactly as for COPY.
+    @Test
+    void selectFromAnUnknownTableThrows(@TempDir Path dataDir) {
+        Binder binder = binderWithTrips(dataDir);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> binder.bind(new SelectStatement("missing", Optional.empty())));
+    }
+
+    // The table exists but has no such column, so the predicate can never be evaluated.
+    @Test
+    void selectOnAnUnknownColumnThrows(@TempDir Path dataDir) {
+        Binder binder = binderWithTrips(dataDir);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> binder.bind(new SelectStatement("trips",
+                        Optional.of(new Predicate("missing", Comparison.EQUALS, "Copenhagen")))));
+    }
+
+    // distance = 'x' compares a LONG column against a String.
+    @Test
+    void aTypeMismatchedConstantThrows(@TempDir Path dataDir) {
+        Binder binder = binderWithTrips(dataDir);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> binder.bind(new SelectStatement("trips",
+                        Optional.of(new Predicate("distance", Comparison.EQUALS, "x")))));
     }
 }
