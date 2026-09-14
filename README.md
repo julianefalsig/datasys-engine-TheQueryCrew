@@ -49,6 +49,7 @@ A small SQL engine built for ITU’s *How to Build Data Systems* (Fall 2026), te
 | File | Role |
 |---|---|
 | `src/test/java/dk/itu/datasys/EngineTest.java` | Unit test for the team-name helper. |
+| `src/test/java/dk/itu/datasys/SqlParserTest.java` | Parser unit tests: statement shapes, literals, case, malformed line/col, comments. |
 | `src/test/java/dk/itu/datasys/sql/SqlPrinterTest.java` | Pretty-printer round-trip over every statement shape. |
 | `src/test/java/dk/itu/datasys/storage/ValueCodecTest.java` | Encode/decode round trip per column type. |
 | `src/test/java/dk/itu/datasys/storage/ColumnStatsTest.java` | Min/max over a column. |
