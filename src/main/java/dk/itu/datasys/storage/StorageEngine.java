@@ -262,12 +262,7 @@ public final class StorageEngine {
     }
 
     private static void requireMatchingType(ColumnSpec column, Object constant) {
-        boolean matches = switch (column.type()) {
-            case STRING -> constant instanceof String;
-            case LONG -> constant instanceof Long;
-            case DOUBLE -> constant instanceof Double;
-        };
-        if (!matches) {
+        if (!column.type().accepts(constant)) {
             throw new IllegalArgumentException(
                     "constant type %s does not match column %s of type %s"
                             .formatted(constant.getClass().getSimpleName(), column.name(), column.type()));
