@@ -83,7 +83,8 @@ class BinderIT {
                 () -> binder.bind(new CreateTableStatement("cities", List.of())));
     }
 
-    // "Already exists" is execution's concern, so re-creating trips must still bind cleanly.
+    // "Already exists" is execution's concern: another session can create the table between binding
+    // and running, so the check only means anything where it happens together with the write.
     @Test
     void anExistingTableIsNotTheBindersProblem(@TempDir Path dataDir) {
         Binder binder = binderWithTrips(dataDir);
