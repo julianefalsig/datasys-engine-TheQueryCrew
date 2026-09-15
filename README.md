@@ -26,6 +26,7 @@ A small SQL engine built for ITU’s *How to Build Data Systems* (Fall 2026), te
 | `src/main/java/dk/itu/datasys/sql/CopyStatement.java` | `COPY … FROM 'path'`. |
 | `src/main/java/dk/itu/datasys/sql/SelectStatement.java` | `SELECT * FROM …` with optional `WHERE`. |
 | `src/main/java/dk/itu/datasys/sql/Predicate.java` | `WHERE` column, `Comparison`, typed constant. |
+| `src/main/java/dk/itu/datasys/sql/Binder.java` | Validates a statement against the catalog (`schema(...)`). |
 
 ### `dk.itu.datasys.storage`
 
@@ -49,12 +50,14 @@ A small SQL engine built for ITU’s *How to Build Data Systems* (Fall 2026), te
 | File | Role |
 |---|---|
 | `src/test/java/dk/itu/datasys/EngineTest.java` | Unit test for the team-name helper. |
+| `src/test/java/dk/itu/datasys/SqlParserTest.java` | Parser unit tests: statement shapes, literals, case, malformed line/col, comments. |
 | `src/test/java/dk/itu/datasys/sql/SqlPrinterTest.java` | Pretty-printer round-trip over every statement shape. |
 | `src/test/java/dk/itu/datasys/storage/ValueCodecTest.java` | Encode/decode round trip per column type. |
 | `src/test/java/dk/itu/datasys/storage/ColumnStatsTest.java` | Min/max over a column. |
 | `src/test/java/dk/itu/datasys/storage/PrunerTest.java` | Partition prune-or-read decisions. |
 | `src/test/java/dk/itu/datasys/storage/CsvParserTest.java` | Headerless CSV line parsing. |
 | `src/test/java/dk/itu/datasys/storage/StorageEngineSmokeTest.java` | End-to-end smoke test on the golden `trips.csv` data. |
+| `src/test/java/dk/itu/datasys/sql/BinderIT.java` | Binder + `StorageEngine` on `@TempDir` (exercise 3.7). |
 | `src/test/java/dk/itu/datasys/storage/StorageEngineIT.java` | Required Exercise 2 integration tests against `StorageEngine`. |
 
 ## File dependencies
@@ -67,6 +70,7 @@ flowchart TD
   subgraph sqlPkg ["dk.itu.datasys.sql"]
     SqlAstBuilder
     SqlPrinter
+    Binder
     Statement
     CreateTableStatement
     CopyStatement
@@ -91,6 +95,8 @@ flowchart TD
   Engine --> SqlPrinter
   SqlParser --> SqlAstBuilder
   SqlPrinter --> Statement
+  Binder --> Statement
+  Binder --> StorageEngine
   SqlParser --> SqlParseException
   SqlAstBuilder --> Statement
   Statement --> CreateTableStatement
