@@ -207,4 +207,32 @@ class StorageEngineIT {
             assertInstanceOf(Double.class, actual.get(i)[2]);
         }
     }
+    // testing that the columns come back in schema order            
+    @Test
+    void returnsTheColumnsInSchemaOrder(@TempDir Path dataDir) {
+        StorageEngine engine = new StorageEngine(dataDir);
+        engine.createTable("trips", TRIPS_SCHEMA);
+
+        assertEquals(TRIPS_SCHEMA, engine.schema("trips"));
+    }
+
+    //testing that an unknown table is an error rather than an empty result
+    @Test
+    void unknownTableThrows(@TempDir Path dataDir) {
+        StorageEngine engine = new StorageEngine(dataDir);
+
+        assertThrows(IllegalArgumentException.class, () -> engine.schema("missing"));
+    }
+
+    // testing that List.copyOf is working (returned list cannot be used to change the catalog)
+    @Test
+    void theReturnedListCannotChangeTheCatalog(@TempDir Path dataDir) {
+        StorageEngine engine = new StorageEngine(dataDir);
+        engine.createTable("trips", TRIPS_SCHEMA);
+
+        List<ColumnSpec> columns = engine.schema("trips");
+        assertThrows(UnsupportedOperationException.class,
+                () -> columns.add(new ColumnSpec("sneaked_in", ColumnType.LONG)));
+        assertEquals(3, engine.schema("trips").size());
+    }
 }
