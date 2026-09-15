@@ -18,16 +18,19 @@ public final class Binder {
     // Validates s against the catalog; throws IllegalArgumentException on the first violation.
     public void bind(Statement statement) {
         switch (statement) {
-            // The file is execution's concern: it can appear or vanish between binding and running.
-            case CopyStatement copy -> engine.schema(copy.tableName());
-            case CreateTableStatement create -> bindCreateTable(create);
+            case CopyStatement copy -> bindCopy(copy);
             case SelectStatement select -> bindSelect(select);
+            case CreateTableStatement create -> bindCreateTable(create);
         }
     }
+    // The lookup is the check: it throws if the table is unknown. The CSV file is execution's concern.
+    private void bindCopy(CopyStatement copy) {
+        engine.schema(copy.tableName());
+    }
 
-    // Without a WHERE there is nothing to check beyond the table itself.
     private void bindSelect(SelectStatement select) {
         List<ColumnSpec> schema = engine.schema(select.tableName());
+        // Without a WHERE there is nothing to check beyond the table itself.
         if (select.where().isEmpty()) {
             return;
         }
