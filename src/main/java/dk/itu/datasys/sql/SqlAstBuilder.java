@@ -1,5 +1,6 @@
 package dk.itu.datasys.sql;
 
+import dk.itu.datasys.SqlParseException;
 import dk.itu.datasys.storage.ColumnSpec;
 import dk.itu.datasys.storage.ColumnType;
 import dk.itu.datasys.storage.Comparison;
@@ -69,10 +70,23 @@ public final class SqlAstBuilder extends SqlBaseVisitor<Object> {
         String text = ctx.getStart().getText();
         return switch (ctx.getStart().getType()) {
             case SqlParser.STRING_LITERAL -> unquote(text);
-            case SqlParser.LONG_LITERAL -> Long.parseLong(text);
+            case SqlParser.LONG_LITERAL -> parseLongLiteral(ctx);
             case SqlParser.DOUBLE_LITERAL -> Double.parseDouble(text);
             default -> throw new IllegalStateException("unhandled literal");
         };
+    }
+
+    private static long parseLongLiteral(SqlParser.LiteralContext ctx) {
+        String text = ctx.getStart().getText();
+        try {
+            return Long.parseLong(text);
+        } catch (NumberFormatException e) {
+            throw new SqlParseException(
+                    "integer literal out of range: " + text,
+                    ctx.getStart().getLine(),
+                    ctx.getStart().getCharPositionInLine(),
+                    e);
+        }
     }
 
     private static String unquote(String stringLiteral) {
