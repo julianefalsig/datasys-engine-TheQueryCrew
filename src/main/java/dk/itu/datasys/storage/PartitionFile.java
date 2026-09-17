@@ -25,7 +25,7 @@ import java.util.List;
  *
  * All multi-byte fields are little-endian.
  */
-final class PartitionFile {
+public final class PartitionFile {
 
     private static final byte[] MAGIC = {'Q', 'C', 'D', 'B'};
     private static final int VERSION = 1;
@@ -85,7 +85,7 @@ final class PartitionFile {
     }
 
     /** Reads every column of the partition, schema order, using the offset table to locate each column chunk. */
-    static List<List<Object>> readAllColumns(Path file, List<ColumnSpec> columns) {
+    public static List<List<Object>> readAllColumns(Path file, List<ColumnSpec> columns) {
         try (FileChannel channel = FileChannel.open(file, StandardOpenOption.READ)) {
             ByteBuffer buffer = ByteBuffer.allocate((int) channel.size()).order(ByteOrder.LITTLE_ENDIAN);
             while (buffer.hasRemaining() && channel.read(buffer) != -1) {

@@ -1,6 +1,6 @@
 # datasys-engine-TheQueryCrew
 
-A small SQL engine built for ITU’s *How to Build Data Systems* (Fall 2026), team **The Query Crew**. The stack is Java 25 and Maven. ANTLR 4 generates the lexer/parser from `src/main/antlr4/dk/itu/datasys/sql/Sql.g4` on `mvn compile`; generated Java lands in `target/generated-sources/antlr4` and is not committed. SQL text parses to a typed AST (`CREATE TABLE` / `COPY` / `SELECT`); nothing executes from SQL yet. The storage API can create a table, `COPY` a headerless CSV into a custom columnar binary format, and `SELECT` with partition min/max pruning. Catalogs are JSON (Jackson); data files are our own binary format.
+A small SQL engine built for ITU’s *How to Build Data Systems* (Fall 2026), team **The Query Crew**. The stack is Java 25 and Maven. ANTLR 4 generates the lexer/parser from `src/main/antlr4/dk/itu/datasys/sql/Sql.g4` on `mvn compile`; generated Java lands in `target/generated-sources/antlr4` and is not committed. SQL text parses to a typed AST (`CREATE TABLE` / `COPY` / `SELECT`); nothing executes from SQL yet. The storage API can create a table, `COPY` a headerless CSV into a custom columnar binary format, and `SELECT` with partition min/max pruning. Catalogs are JSON (Jackson); data files are our own binary format. A Volcano-style operator model (`Scan`, `Filter`) lives in `dk.itu.datasys.exec`; it is not wired into `select` yet, which still reads and filters in one pass.
 
 `mvn test` runs `*Test` unit tests (Surefire). `mvn verify` also runs `*IT` integration tests (Failsafe).
 
@@ -28,18 +28,27 @@ A small SQL engine built for ITU’s *How to Build Data Systems* (Fall 2026), te
 | `src/main/java/dk/itu/datasys/sql/Predicate.java` | `WHERE` column, `Comparison`, typed constant. |
 | `src/main/java/dk/itu/datasys/sql/Binder.java` | Validates a statement against the catalog (`schema(...)`). |
 
+### `dk.itu.datasys.exec`
+
+| File | Role |
+|---|---|
+| `src/main/java/dk/itu/datasys/exec/Operator.java` | Volcano pipeline contract: `open()`, `next()` until null, `close()`. |
+| `src/main/java/dk/itu/datasys/exec/ScanOperator.java` | Reads the partitions it is handed, in order. Sees no predicate and prunes nothing. |
+| `src/main/java/dk/itu/datasys/exec/FilterOperator.java` | Passes on the rows its predicate accepts; logs `rowsIn`/`rowsOut` on close. |
+| `src/main/java/dk/itu/datasys/exec/RowPredicate.java` | A `WHERE` by column position rather than name, as the pipeline sees it. |
+
 ### `dk.itu.datasys.storage`
 
 | File | Role |
 |---|---|
 | `src/main/java/dk/itu/datasys/storage/StorageEngine.java` | Storage API: `createTable`, `copyFile`, `select`, restart from a data directory. |
-| `src/main/java/dk/itu/datasys/storage/ColumnType.java` | Column types: `STRING`, `LONG`, `DOUBLE`. |
+| `src/main/java/dk/itu/datasys/storage/ColumnType.java` | Column types: `STRING`, `LONG`, `DOUBLE`, and which Java value each accepts. |
 | `src/main/java/dk/itu/datasys/storage/ColumnSpec.java` | One schema column (name + type). Also stored in the catalog JSON. |
-| `src/main/java/dk/itu/datasys/storage/Comparison.java` | Predicate ops: `EQUALS`, `LESS_THAN`, `GREATER_THAN`. |
+| `src/main/java/dk/itu/datasys/storage/Comparison.java` | Predicate ops: `EQUALS`, `LESS_THAN`, `GREATER_THAN`, and the row test `matches(value, constant, type)`. |
 | `src/main/java/dk/itu/datasys/storage/ScanStats.java` | How many partitions a `select` saw, read, and pruned. |
 | `src/main/java/dk/itu/datasys/storage/CatalogData.java` | In-memory / JSON catalog: schema, `maxRowsPerPartition`, partitions and typed min/max. |
 | `src/main/java/dk/itu/datasys/storage/CatalogStore.java` | Reads and writes `catalog.json` under each table directory. |
-| `src/main/java/dk/itu/datasys/storage/PartitionFile.java` | Binary layout of one partition file (magic, version, offset table, column chunks). |
+| `src/main/java/dk/itu/datasys/storage/PartitionFile.java` | Binary layout of one partition file (magic, version, offset table, column chunks). Only `readAllColumns` is open outside the package; writing stays with `copyFile`, so every file has a catalog entry. |
 | `src/main/java/dk/itu/datasys/storage/ValueCodec.java` | Encode/decode one `LONG` / `DOUBLE` / `STRING` value (little-endian). |
 | `src/main/java/dk/itu/datasys/storage/CsvParser.java` | Headerless positional CSV line → typed `Object[]`. |
 | `src/main/java/dk/itu/datasys/storage/ColumnStats.java` | Min/max over a column and the comparator used for that type. |
@@ -59,6 +68,11 @@ A small SQL engine built for ITU’s *How to Build Data Systems* (Fall 2026), te
 | `src/test/java/dk/itu/datasys/storage/StorageEngineSmokeTest.java` | End-to-end smoke test on the golden `trips.csv` data. |
 | `src/test/java/dk/itu/datasys/sql/BinderIT.java` | Binder + `StorageEngine` on `@TempDir` (exercise 3.7). |
 | `src/test/java/dk/itu/datasys/storage/StorageEngineIT.java` | Required Exercise 2 integration tests against `StorageEngine`. |
+| `src/test/java/dk/itu/datasys/storage/ColumnTypeTest.java` | Which Java value each column type accepts. |
+| `src/test/java/dk/itu/datasys/exec/FilterOperatorTest.java` | Filter over a stub child, including lexicographic `STRING` order and exhaustion. |
+| `src/test/java/dk/itu/datasys/exec/ScanOperatorTest.java` | Scan over real partition files, including the fully pruned empty-partition case. |
+| `src/test/java/dk/itu/datasys/exec/TestListOperator.java` | Test helper: a stub child operator serving rows from a list. |
+| `src/test/java/dk/itu/datasys/storage/TestPartitions.java` | Test helper: writes a partition file for tests outside the storage package. |
 
 ## File dependencies
 
@@ -76,6 +90,12 @@ flowchart TD
     CopyStatement
     SelectStatement
     Predicate
+  end
+  subgraph execPkg ["dk.itu.datasys.exec"]
+    Operator
+    ScanOperator
+    FilterOperator
+    RowPredicate
   end
   subgraph storagePkg ["dk.itu.datasys.storage"]
     StorageEngine
@@ -125,6 +145,13 @@ flowchart TD
   ColumnSpec --> ColumnType
   ValueCodec --> ColumnType
   ColumnStats --> ColumnType
+  ScanOperator --> Operator
+  FilterOperator --> Operator
+  FilterOperator --> RowPredicate
+  ScanOperator --> PartitionFile
+  ScanOperator --> ColumnSpec
+  RowPredicate --> Comparison
+  RowPredicate --> ColumnType
 ```
 
 `mvn compile exec:java` parses the four Task 1 statements and prints their pretty-printed form, one per line. Nothing executes yet.

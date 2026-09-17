@@ -11,7 +11,6 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -197,7 +196,7 @@ public final class StorageEngine {
 
                 for (int r = 0; r < entry.rowCount(); r++) {
                     Object value = partitionData.get(predicateIndex).get(r);
-                    if (matches(comparison, constant, value, predicateColumn.type())) {
+                    if (comparison.matches(value, constant, predicateColumn.type())) {
                         Object[] row = new Object[columns.size()];
                         for (int c = 0; c < columns.size(); c++) {
                             row[c] = partitionData.get(c).get(r);
@@ -267,16 +266,6 @@ public final class StorageEngine {
                     "constant type %s does not match column %s of type %s"
                             .formatted(constant.getClass().getSimpleName(), column.name(), column.type()));
         }
-    }
-
-    private static boolean matches(Comparison comparison, Object constant, Object value, ColumnType type) {
-        Comparator<Object> cmp = ColumnStats.comparatorFor(type);
-        int c = cmp.compare(value, constant);
-        return switch (comparison) {
-            case EQUALS -> c == 0;
-            case LESS_THAN -> c < 0;
-            case GREATER_THAN -> c > 0;
-        };
     }
 
     private static List<Object[]> readCsv(String csvFilePath, List<ColumnSpec> columns) {
