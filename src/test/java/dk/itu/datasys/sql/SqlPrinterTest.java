@@ -40,6 +40,14 @@ class SqlPrinterTest {
         assertEquals(statement, roundTrip(statement));
     }
 
+    @Test
+    void negativeZeroDoubleRoundTrips() {
+        Statement statement = new SelectStatement(
+                "trips",
+                Optional.of(new Predicate("price", Comparison.EQUALS, -0.0)));
+        assertEquals(statement, roundTrip(statement));
+    }
+
     private static Statement roundTrip(Statement statement) {
         SqlParser parser = new SqlParser();
         List<Statement> reprinted = parser.parse(new SqlPrinter().print(statement));

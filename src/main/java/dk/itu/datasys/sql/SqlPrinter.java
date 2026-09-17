@@ -61,6 +61,10 @@ public final class SqlPrinter {
 
     /** Grammar is `-`? digits `.` digits — never scientific notation, always a decimal point. */
     private static String formatDouble(double value) {
+        // BigDecimal.valueOf drops the sign of -0.0, but Double.equals distinguishes it from 0.0.
+        if (Double.doubleToRawLongBits(value) == Double.doubleToRawLongBits(-0.0)) {
+            return "-0.0";
+        }
         String plain = BigDecimal.valueOf(value).toPlainString();
         return plain.contains(".") ? plain : plain + ".0";
     }
