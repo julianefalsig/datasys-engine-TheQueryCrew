@@ -55,6 +55,15 @@ class SqlParserTest {
     }
 
     @Test
+    void integerOverflowReportsLineAndColumn() {
+        // Long.MAX_VALUE is 9223372036854775807; one more overflows.
+        String sql = "SELECT * FROM trips WHERE distance = 9223372036854775808;";
+        SqlParseException error = assertThrows(SqlParseException.class, () -> parser.parse(sql));
+        assertEquals(1, error.line());
+        assertEquals("SELECT * FROM trips WHERE distance = ".length(), error.column());
+    }
+
+    @Test
     void keywordsAreCaseInsensitiveAndIdentifierCasingIsPreserved() {
         assertEquals(
                 new SelectStatement("trips", Optional.empty()),
