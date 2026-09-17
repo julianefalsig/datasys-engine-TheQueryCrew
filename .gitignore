@@ -50,3 +50,6 @@ buildNumber.properties
 # Output files
 logs/
 target/
+
+# Engine data directory (default for Engine.main)
+data/
