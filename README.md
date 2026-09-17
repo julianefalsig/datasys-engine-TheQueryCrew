@@ -4,6 +4,15 @@ A small SQL engine built for ITU’s *How to Build Data Systems* (Fall 2026), te
 
 `mvn test` runs `*Test` unit tests (Surefire). `mvn verify` also runs `*IT` integration tests (Failsafe).
 
+## Co-author Lines
+```
+Co-authored-by: Mie-Jonasson <jonasson2001@gmail.com>
+Co-authored-by: juhv <juhv@itu.dk>
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
+```
+
 ## Java files
 
 ### `dk.itu.datasys`
