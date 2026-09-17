@@ -1,5 +1,10 @@
 package dk.itu.datasys.storage;
 
+import dk.itu.datasys.exec.Plan;
+import dk.itu.datasys.exec.Planner;
+import dk.itu.datasys.sql.Predicate;
+import dk.itu.datasys.sql.SelectStatement;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -14,6 +19,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -153,14 +159,10 @@ public final class StorageEngine {
         long start = System.currentTimeMillis();
         try {
             CatalogData catalog = requireCatalog(tableName);
-            List<ColumnSpec> columns = catalog.columns;
-
-            int predicateIndex = -1;
             ColumnSpec predicateColumn = null;
-            for (int i = 0; i < columns.size(); i++) {
-                if (columns.get(i).name().equals(columnName)) {
-                    predicateIndex = i;
-                    predicateColumn = columns.get(i);
+            for (ColumnSpec column : catalog.columns) {
+                if (column.name().equals(columnName)) {
+                    predicateColumn = column;
                     break;
                 }
             }
@@ -169,48 +171,16 @@ public final class StorageEngine {
             }
             requireMatchingType(predicateColumn, constant);
 
-            List<Object[]> results = new ArrayList<>();
-            int partitionsTotal = catalog.partitions.size();
-            int partitionsRead = 0;
-            int partitionsPruned = 0;
-
-            for (int p = 0; p < catalog.partitions.size(); p++) {
-                CatalogData.Partition entry = catalog.partitions.get(p);
-                CatalogData.Range stats = entry.stats().get(columnName);
-                Object min = stats.min();
-                Object max = stats.max();
-
-                boolean prune = Pruner.canPrune(comparison, constant, min, max, predicateColumn.type());
-                LOGGER.debug("op=select table={} column={} comparison={} const={} partition={} min={} max={} decision={}",
-                        csvSafe(tableName), csvSafe(columnName), comparison, csvSafe(constant), p,
-                        csvSafe(min), csvSafe(max), prune ? "PRUNED" : "READ");
-
-                if (prune) {
-                    partitionsPruned++;
-                    continue;
-                }
-                partitionsRead++;
-
-                List<List<Object>> partitionData =
-                        PartitionFile.readAllColumns(tableDirectory(tableName).resolve(entry.dataFile()), columns);
-
-                for (int r = 0; r < entry.rowCount(); r++) {
-                    Object value = partitionData.get(predicateIndex).get(r);
-                    if (comparison.matches(value, constant, predicateColumn.type())) {
-                        Object[] row = new Object[columns.size()];
-                        for (int c = 0; c < columns.size(); c++) {
-                            row[c] = partitionData.get(c).get(r);
-                        }
-                        results.add(row);
-                    }
-                }
-            }
+            SelectStatement statement = new SelectStatement(
+                    tableName, Optional.of(new Predicate(columnName, comparison, constant)));
+            Plan plan = new Planner(this).plan(statement);
+            lastScanStats = plan.stats();
+            List<Object[]> results = plan.drain();
 
             long durationMs = System.currentTimeMillis() - start;
-            lastScanStats = new ScanStats(partitionsTotal, partitionsRead, partitionsPruned);
             LOGGER.debug("op=select table={} column={} comparison={} const={} partitionsRead={} partitionsPruned={} rowsOut={} durationMs={}",
                     csvSafe(tableName), csvSafe(columnName), comparison, csvSafe(constant),
-                    partitionsRead, partitionsPruned, results.size(), durationMs);
+                    plan.stats().partitionsRead(), plan.stats().partitionsPruned(), results.size(), durationMs);
 
             return results;
         } catch (RuntimeException e) {
@@ -219,7 +189,6 @@ public final class StorageEngine {
         }
     }
 
-    
     //method used for the binder. The table's schema, in column order. Throws IllegalArgumentException if the table is unknown.
 
     public List<ColumnSpec> schema(String tableName) {
@@ -230,6 +199,21 @@ public final class StorageEngine {
         } catch (RuntimeException e) {
             throw failed("schema", "table=" + tableName, e);
         }
+    }
+
+    /** Live catalog for planning; callers must not mutate it. */
+    public CatalogData catalog(String tableName) {
+        return requireCatalog(tableName);
+    }
+
+    /** Directory that holds this table's catalog and partition files. */
+    public Path tableDirectory(String tableName) {
+        return dataDirectory.resolve(tableName);
+    }
+
+    /** Records prune/read stats from the most recent planned SELECT. */
+    public void recordScanStats(ScanStats stats) {
+        this.lastScanStats = stats;
     }
 
     /** Pruning stats from the most recent {@link #select}, so pruning decisions are observable beyond the log. */
@@ -246,10 +230,6 @@ public final class StorageEngine {
 
     private static String csvSafe(Object value) {
         return value == null ? "none" : String.valueOf(value).replace(',', ';').replaceAll("\\s+", " ");
-    }
-
-    private Path tableDirectory(String tableName) {
-        return dataDirectory.resolve(tableName);
     }
 
     private CatalogData requireCatalog(String tableName) {

@@ -1,6 +1,6 @@
 # datasys-engine-TheQueryCrew
 
-A small SQL engine built for ITU’s *How to Build Data Systems* (Fall 2026), team **The Query Crew**. The stack is Java 25 and Maven. ANTLR 4 generates the lexer/parser from `src/main/antlr4/dk/itu/datasys/sql/Sql.g4` on `mvn compile`; generated Java lands in `target/generated-sources/antlr4` and is not committed. SQL text parses to a typed AST (`CREATE TABLE` / `COPY` / `SELECT`); nothing executes from SQL yet. The storage API can create a table, `COPY` a headerless CSV into a custom columnar binary format, and `SELECT` with partition min/max pruning. Catalogs are JSON (Jackson); data files are our own binary format. A Volcano-style operator model (`Scan`, `Filter`) lives in `dk.itu.datasys.exec`; it is not wired into `select` yet, which still reads and filters in one pass.
+A small SQL engine built for ITU’s *How to Build Data Systems* (Fall 2026), team **The Query Crew**. The stack is Java 25 and Maven. ANTLR 4 generates the lexer/parser from `src/main/antlr4/dk/itu/datasys/sql/Sql.g4` on `mvn compile`; generated Java lands in `target/generated-sources/antlr4` and is not committed. SQL text parses to a typed AST (`CREATE TABLE` / `COPY` / `SELECT`). A planner turns a bound `SELECT` into a Volcano pipeline (`Scan` → optional `Filter`), pruning partitions from catalog min/max before any data file opens. An executor runs `parse → bind → plan → execute` statement by statement. The storage API can create a table, `COPY` a headerless CSV into a custom columnar binary format, and `SELECT` (same week-2 signature) which now plans and drains that pipeline internally. Catalogs are JSON (Jackson); data files are our own binary format.
 
 `mvn test` runs `*Test` unit tests (Surefire). `mvn verify` also runs `*IT` integration tests (Failsafe).
 
@@ -45,12 +45,15 @@ Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
 | `src/main/java/dk/itu/datasys/exec/ScanOperator.java` | Reads the partitions it is handed, in order. Sees no predicate and prunes nothing. |
 | `src/main/java/dk/itu/datasys/exec/FilterOperator.java` | Passes on the rows its predicate accepts; logs `rowsIn`/`rowsOut` on close. |
 | `src/main/java/dk/itu/datasys/exec/RowPredicate.java` | A `WHERE` by column position rather than name, as the pipeline sees it. |
+| `src/main/java/dk/itu/datasys/exec/Plan.java` | Planned SELECT: operator root plus `ScanStats`; `drain()` pulls all rows. |
+| `src/main/java/dk/itu/datasys/exec/Planner.java` | Bound SELECT → plan; prunes partitions and emits `decision=READ\|PRUNED` log lines. |
+| `src/main/java/dk/itu/datasys/exec/Executor.java` | `parse → bind → plan → execute` per statement; CREATE/COPY call storage directly. |
 
 ### `dk.itu.datasys.storage`
 
 | File | Role |
 |---|---|
-| `src/main/java/dk/itu/datasys/storage/StorageEngine.java` | Storage API: `createTable`, `copyFile`, `select`, restart from a data directory. |
+| `src/main/java/dk/itu/datasys/storage/StorageEngine.java` | Storage API: `createTable`, `copyFile`, `select` (plans + drains), `schema`/`catalog` for binder and planner. |
 | `src/main/java/dk/itu/datasys/storage/ColumnType.java` | Column types: `STRING`, `LONG`, `DOUBLE`, and which Java value each accepts. |
 | `src/main/java/dk/itu/datasys/storage/ColumnSpec.java` | One schema column (name + type). Also stored in the catalog JSON. |
 | `src/main/java/dk/itu/datasys/storage/Comparison.java` | Predicate ops: `EQUALS`, `LESS_THAN`, `GREATER_THAN`, and the row test `matches(value, constant, type)`. |
@@ -80,6 +83,7 @@ Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
 | `src/test/java/dk/itu/datasys/storage/ColumnTypeTest.java` | Which Java value each column type accepts. |
 | `src/test/java/dk/itu/datasys/exec/FilterOperatorTest.java` | Filter over a stub child, including lexicographic `STRING` order and exhaustion. |
 | `src/test/java/dk/itu/datasys/exec/ScanOperatorTest.java` | Scan over real partition files, including the fully pruned empty-partition case. |
+| `src/test/java/dk/itu/datasys/exec/PlannerTest.java` | Planner shapes (Filter/Scan) and pruning `ScanStats` on sorted golden data. |
 | `src/test/java/dk/itu/datasys/exec/TestListOperator.java` | Test helper: a stub child operator serving rows from a list. |
 | `src/test/java/dk/itu/datasys/storage/TestPartitions.java` | Test helper: writes a partition file for tests outside the storage package. |
 
@@ -105,6 +109,9 @@ flowchart TD
     ScanOperator
     FilterOperator
     RowPredicate
+    Plan
+    Planner
+    Executor
   end
   subgraph storagePkg ["dk.itu.datasys.storage"]
     StorageEngine
@@ -139,11 +146,11 @@ flowchart TD
   StorageEngine --> CatalogData
   StorageEngine --> PartitionFile
   StorageEngine --> CsvParser
-  StorageEngine --> Pruner
   StorageEngine --> ColumnStats
   StorageEngine --> ColumnSpec
   StorageEngine --> Comparison
   StorageEngine --> ScanStats
+  StorageEngine --> Planner
   CatalogStore --> CatalogData
   CatalogData --> ColumnSpec
   PartitionFile --> ValueCodec
@@ -161,6 +168,19 @@ flowchart TD
   ScanOperator --> ColumnSpec
   RowPredicate --> Comparison
   RowPredicate --> ColumnType
+  Plan --> Operator
+  Plan --> ScanStats
+  Planner --> Plan
+  Planner --> ScanOperator
+  Planner --> FilterOperator
+  Planner --> RowPredicate
+  Planner --> Pruner
+  Planner --> StorageEngine
+  Planner --> SelectStatement
+  Executor --> SqlParser
+  Executor --> Binder
+  Executor --> Planner
+  Executor --> StorageEngine
 ```
 
 `mvn compile exec:java` parses the four Task 1 statements and prints their pretty-printed form, one per line. Nothing executes yet.
