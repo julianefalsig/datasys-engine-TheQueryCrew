@@ -1,4 +1,8 @@
-package dk.itu.datasys.storage;
+package dk.itu.datasys.exec;
+
+import dk.itu.datasys.storage.ColumnSpec;
+import dk.itu.datasys.storage.ColumnType;
+import dk.itu.datasys.storage.TestPartitions;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -17,20 +21,10 @@ class ScanOperatorTest {
             new ColumnSpec("distance", ColumnType.LONG),
             new ColumnSpec("price", ColumnType.DOUBLE));
 
-    // Writes one partition file straight through PartitionFile, so the test depends on the format
-    // rather than on StorageEngine having partitioned things a particular way.
+    // The format is written through a storage-side test helper, because PartitionFile.write is not
+    // open outside its package: only copyFile may create a partition the catalog knows about.
     private static Path writePartition(Path dir, String name, Object[]... rows) {
-        List<List<Object>> columnData = new ArrayList<>();
-        for (int c = 0; c < TRIPS_SCHEMA.size(); c++) {
-            List<Object> values = new ArrayList<>();
-            for (Object[] row : rows) {
-                values.add(row[c]);
-            }
-            columnData.add(values);
-        }
-        Path file = dir.resolve(name);
-        PartitionFile.write(file, TRIPS_SCHEMA, columnData, rows.length);
-        return file;
+        return TestPartitions.write(dir, name, TRIPS_SCHEMA, List.of(rows));
     }
 
     private static List<Object[]> drain(Operator operator) {

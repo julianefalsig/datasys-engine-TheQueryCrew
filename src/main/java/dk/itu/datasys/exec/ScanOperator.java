@@ -1,4 +1,7 @@
-package dk.itu.datasys.storage;
+package dk.itu.datasys.exec;
+
+import dk.itu.datasys.storage.ColumnSpec;
+import dk.itu.datasys.storage.PartitionFile;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

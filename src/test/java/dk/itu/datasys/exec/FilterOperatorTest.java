@@ -1,4 +1,7 @@
-package dk.itu.datasys.storage;
+package dk.itu.datasys.exec;
+
+import dk.itu.datasys.storage.ColumnType;
+import dk.itu.datasys.storage.Comparison;
 
 import org.junit.jupiter.api.Test;
 

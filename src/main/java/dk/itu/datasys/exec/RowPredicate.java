@@ -1,4 +1,7 @@
-package dk.itu.datasys.storage;
+package dk.itu.datasys.exec;
+
+import dk.itu.datasys.storage.ColumnType;
+import dk.itu.datasys.storage.Comparison;
 
 /**
  * A WHERE clause as the pipeline sees it: a column position rather than a name, because the rows
