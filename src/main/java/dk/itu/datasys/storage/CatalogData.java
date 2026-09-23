@@ -9,17 +9,17 @@ import java.util.Map;
  * The JSON-serializable contents of one table's catalog file: schema, partition size,
  * and the list of partitions with their per-column min/max (catalog-only pruning, per storage-design.md).
  */
-final class CatalogData {
+public final class CatalogData {
 
     public List<ColumnSpec> columns = new ArrayList<>();
     public int maxRowsPerPartition;
     public List<Partition> partitions = new ArrayList<>();
 
-    record Partition(String dataFile, int rowCount, Map<String, Range> stats) {
+    public record Partition(String dataFile, int rowCount, Map<String, Range> stats) {
     }
 
     /** min/max as JSON numbers or strings matching the column type. */
-    record Range(Object min, Object max) {
+    public record Range(Object min, Object max) {
     }
 
     void coerceStats() {
