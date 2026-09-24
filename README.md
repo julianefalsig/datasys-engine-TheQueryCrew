@@ -19,7 +19,7 @@ Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
 
 | File | Role |
 |---|---|
-| `src/main/java/dk/itu/datasys/Engine.java` | Process entrypoint (`mvn compile exec:java`). Parses the four Task 1 statements and prints their pretty-printed form. |
+| `src/main/java/dk/itu/datasys/Engine.java` | SQL front door (`mvn compile exec:java`): one statement, or `-f` script; SELECT rows as headerless CSV on stdout; data under `data/`. |
 | `src/main/java/dk/itu/datasys/SqlParser.java` | Facade: SQL text → `List<Statement>`, or `SqlParseException` with line/column. |
 | `src/main/java/dk/itu/datasys/SqlParseException.java` | Syntax error from the lexer/parser (1-based line, 0-based column). |
 
@@ -71,6 +71,7 @@ Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
 | File | Role |
 |---|---|
 | `src/test/java/dk/itu/datasys/EngineTest.java` | Unit test for the team-name helper. |
+| `src/test/java/dk/itu/datasys/EngineFrontDoorIT.java` | Front door: script → headerless CSV on stdout; failing script → stderr only. |
 | `src/test/java/dk/itu/datasys/SqlParserTest.java` | Parser unit tests: statement shapes, literals, case, malformed line/col, comments. |
 | `src/test/java/dk/itu/datasys/sql/SqlPrinterTest.java` | Pretty-printer round-trip over every statement shape. |
 | `src/test/java/dk/itu/datasys/storage/ValueCodecTest.java` | Encode/decode round trip per column type. |
@@ -127,8 +128,8 @@ flowchart TD
     ValueCodec
     ColumnType
   end
-  Engine --> SqlParser
-  Engine --> SqlPrinter
+  Engine --> Executor
+  Engine --> StorageEngine
   SqlParser --> SqlAstBuilder
   SqlPrinter --> Statement
   Binder --> Statement
@@ -183,4 +184,4 @@ flowchart TD
   Executor --> StorageEngine
 ```
 
-`mvn compile exec:java` parses the four Task 1 statements and prints their pretty-printed form, one per line. Nothing executes yet.
+`mvn compile exec:java` is the SQL front door: one statement, or `-f` a `.sql` file; SELECT rows as headerless CSV on stdout; storage under `data/`.
