@@ -31,6 +31,11 @@ public final class ScanOperator implements Operator {
         this.partitionFiles = List.copyOf(partitionFiles);
     }
 
+    /** The partitions the planner handed over, in catalog order. */
+    public List<Path> partitions() {
+        return partitionFiles;
+    }
+
     @Override
     public void open() {
         partitionIndex = 0;
