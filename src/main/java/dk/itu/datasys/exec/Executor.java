@@ -8,6 +8,8 @@ import dk.itu.datasys.sql.SelectStatement;
 import dk.itu.datasys.sql.Statement;
 import dk.itu.datasys.storage.StorageEngine;
 
+import org.slf4j.MDC;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -16,6 +18,11 @@ import java.util.List;
  * CREATE TABLE and COPY call the storage API directly; SELECT drains a planned operator tree.
  */
 public final class Executor {
+
+    private static final String STATEMENT_NUMBER = "statementNumber";
+
+    /** What the MDC holds while no statement is running; the engine sets it at startup. */
+    private static final String OUTSIDE_ANY_STATEMENT = "0";
 
     private final StorageEngine engine;
     private final SqlParser parser;
@@ -30,16 +37,26 @@ public final class Executor {
     }
 
     /**
-     * Executes every statement in {@code sql}. Each SELECT contributes one result list, in order;
-     * CREATE TABLE and COPY contribute nothing.
+     * Executes every statement in {@code sql}, counting {@code statementNumber} from 1. Each SELECT
+     * contributes one result list, in order; CREATE TABLE and COPY contribute nothing. Parsing stays
+     * outside the count, and the 0 goes back even when a statement throws, so the engine's stop line
+     * falls outside too.
      */
     public List<List<Object[]>> execute(String sql) {
+        List<Statement> statements = parser.parse(sql);
+
         List<List<Object[]>> selectResults = new ArrayList<>();
-        for (Statement statement : parser.parse(sql)) {
-            List<Object[]> rows = execute(statement);
-            if (rows != null) {
-                selectResults.add(rows);
+        try {
+            int statementNumber = 0;
+            for (Statement statement : statements) {
+                MDC.put(STATEMENT_NUMBER, String.valueOf(++statementNumber));
+                List<Object[]> rows = execute(statement);
+                if (rows != null) {
+                    selectResults.add(rows);
+                }
             }
+        } finally {
+            MDC.put(STATEMENT_NUMBER, OUTSIDE_ANY_STATEMENT);
         }
         return selectResults;
     }
