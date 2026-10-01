@@ -32,6 +32,45 @@ class EngineFrontDoorIT {
     // ---- In process -----------------------------------------------------------------------
 
     @Test
+    void commandFlagExecutesSql() throws IOException {
+        Path csv = copyResource("trips.csv");
+        String sql = """
+                CREATE TABLE trips (city STRING, distance LONG, price DOUBLE);
+                COPY trips FROM '%s';
+                SELECT * FROM trips WHERE city = 'Odense';
+                """.formatted(sqlPath(csv));
+
+        ByteArrayOutputStream stdout = new ByteArrayOutputStream();
+        ByteArrayOutputStream stderr = new ByteArrayOutputStream();
+        int exit = Engine.run(
+                new String[] {"-c", sql},
+                temp.resolve("data"),
+                new PrintStream(stdout, true, StandardCharsets.UTF_8),
+                new PrintStream(stderr, true, StandardCharsets.UTF_8));
+
+        assertEquals(0, exit);
+        assertEquals("""
+                Odense,95,120.75
+                """, stdout.toString(StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void failingCommandFlagLeavesStdoutClean() {
+        ByteArrayOutputStream stdout = new ByteArrayOutputStream();
+        ByteArrayOutputStream stderr = new ByteArrayOutputStream();
+        int exit = Engine.run(
+                new String[] {"-c", "SELECT * FROM missing;"},
+                temp.resolve("data"),
+                new PrintStream(stdout, true, StandardCharsets.UTF_8),
+                new PrintStream(stderr, true, StandardCharsets.UTF_8));
+
+        assertEquals(1, exit);
+        assertEquals("", stdout.toString(StandardCharsets.UTF_8));
+        assertFalse(stderr.toString(StandardCharsets.UTF_8).isBlank());
+        assertTrue(stderr.toString(StandardCharsets.UTF_8).contains("missing"));
+    }
+
+    @Test
     void scriptStdoutIsHeaderlessCsv() throws IOException {
         Path script = writeScript("q.sql", "SELECT * FROM trips WHERE city = 'Copenhagen';");
 

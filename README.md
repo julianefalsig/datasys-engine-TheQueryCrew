@@ -19,7 +19,7 @@ Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
 
 | File | Role |
 |---|---|
-| `src/main/java/dk/itu/datasys/Engine.java` | SQL front door (`mvn compile exec:java`): one statement, or `-f` script; SELECT rows as headerless CSV on stdout; data under `data/`. |
+| `src/main/java/dk/itu/datasys/Engine.java` | SQL front door (`./engine`): `-c` for a statement or script, or `-f` a file; SELECT rows as headerless CSV on stdout; data under `data/`. |
 | `src/main/java/dk/itu/datasys/SqlParser.java` | Facade: SQL text → `List<Statement>`, or `SqlParseException` with line/column. |
 | `src/main/java/dk/itu/datasys/SqlParseException.java` | Syntax error from the lexer/parser (1-based line, 0-based column). |
 
@@ -184,4 +184,4 @@ flowchart TD
   Executor --> StorageEngine
 ```
 
-`mvn compile exec:java` is the SQL front door: one statement, or `-f` a `.sql` file; SELECT rows as headerless CSV on stdout; storage under `data/`.
+`mvn package` writes `target/engine.jar`. `./engine` is the SQL front door: `-c` a statement or script, or `-f` a `.sql` file; SELECT rows as headerless CSV on stdout; storage under `data/`.
