@@ -196,4 +196,17 @@ CREATE TABLE trips (city STRING, distance LONG, price DOUBLE);
 COPY trips FROM 'sources/trips.csv';
 ```
 
-We consider in particular a command-line call `./engine -c "SELECT * FROM trips WHERE distance > 100;"`.
+We consider in particular a command-line call `./engine -c "SELECT * FROM trips WHERE distance > 100;"`. This outputs the logs:
+```
+11:26:08.857 DEBUG Engine - engine started
+11:26:08.970 DEBUG SqlParser - statements=1 durationMs=17
+11:26:08.972 DEBUG StorageEngine - op=schema table=trips columns=3
+11:26:08.973 DEBUG Planner - op=select table=trips column=distance comparison=GREATER_THAN const=100 partition=0 min=12 max=299 decision=READ
+11:26:08.975 DEBUG FilterOperator - op=filter rowsIn=8 rowsOut=4
+11:26:08.975 DEBUG ScanOperator - op=scan table=trips partitions=1 rowsOut=8
+Aarhus,187,301.0
+Copenhagen,140,210.0
+Aalborg,210,340.5
+Esbjerg,299,450.25
+11:26:08.975 DEBUG Engine - engine stopped
+```
