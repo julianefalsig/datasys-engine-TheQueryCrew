@@ -66,8 +66,8 @@ public final class Engine {
     }
 
     private static String resolveSql(String[] args) throws IOException {
-        if (args.length == 1) {
-            return args[0];
+        if (args.length == 2 && "-c".equals(args[0])) {
+            return args[1];
         }
         if (args.length == 2 && "-f".equals(args[0])) {
             return Files.readString(Path.of(args[1]), StandardCharsets.UTF_8);
@@ -94,7 +94,7 @@ public final class Engine {
         dest.println(new Engine().teamName());
         dest.println("Usage:");
         dest.println("  (no args)              print this help");
-        dest.println("  <sql>                  execute one SQL statement or script");
+        dest.println("  -c <sql>               execute one SQL statement or script");
         dest.println("  -f <path.sql>          execute a SQL file");
         dest.println("Data directory defaults to ./data/");
     }
