@@ -185,3 +185,15 @@ flowchart TD
 ```
 
 `mvn package` writes `target/engine.jar`. `./engine` is the SQL front door: `-c` a statement or script, or `-f` a `.sql` file; SELECT rows as headerless CSV on stdout; storage under `data/`.
+
+## Tracing a Statement through the Engine
+In order to fully understand to code base, it is useful to look at it from the perspective of a single SELECT statement with a predicate, and investigate what happens throughout class instances and function calls.
+
+Let's consider the statement `SELECT * FROM trips WHERE distance > 100;` (which is often used in testing), considering an instance of the engine where the trips table has already been created through:
+
+```sql
+CREATE TABLE trips (city STRING, distance LONG, price DOUBLE);
+COPY trips FROM 'sources/trips.csv';
+```
+
+We consider in particular a command-line call `./engine -c "SELECT * FROM trips WHERE distance > 100;"`.
