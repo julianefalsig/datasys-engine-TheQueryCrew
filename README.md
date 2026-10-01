@@ -47,7 +47,7 @@ Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
 | `src/main/java/dk/itu/datasys/exec/RowPredicate.java` | A `WHERE` by column position rather than name, as the pipeline sees it. |
 | `src/main/java/dk/itu/datasys/exec/Plan.java` | Planned SELECT: operator root plus `ScanStats`; `drain()` pulls all rows. |
 | `src/main/java/dk/itu/datasys/exec/Planner.java` | Bound SELECT → plan; prunes partitions and emits `decision=READ\|PRUNED` log lines. |
-| `src/main/java/dk/itu/datasys/exec/Executor.java` | `parse → bind → plan → execute` per statement; CREATE/COPY call storage directly. |
+| `src/main/java/dk/itu/datasys/exec/Executor.java` | `parse → bind → plan → execute` per statement; CREATE/COPY call storage directly. Counts `statementNumber` into the MDC from 1, back to 0 when the script ends. |
 
 ### `dk.itu.datasys.storage`
 
