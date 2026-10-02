@@ -210,3 +210,76 @@ Aalborg,210,340.5
 Esbjerg,299,450.25
 11:26:08.975 DEBUG Engine - engine stopped
 ```
+
+The following intermediate states in the code happen between calling from the command line and producing the csv output:
+1. In `Engine.java` the function is called `run(args = ["-c", "SELECT * FROM trips WHERE distance > 100;"], dataDir = Path.of("data"), out = System.out, err = System.err)`
+2. In `Engine.java` the variable `sql` is assigned through `resolveSql(args = ["-c", "SELECT * FROM trips WHERE distance > 100;"])` to equal `sql = "SELECT * FROM trips WHERE distance > 100;"`
+3. In `Engine.java` the `Executor(engine)` is called to `executor.execute("SELECT * FROM trips WHERE distance > 100;")`
+  3.1 In `Executor.java` the `Parser()` is invoked assigning `statements = parser.parse("SELECT * FROM trips WHERE distance > 100;")`. The Parser returns a single-statement-list of: `SelectStatement(tableName = "trips", where = Predicate(columnName = "distance", comparison = Comparison.GREATER_THAN, constant = 100L))`
+  3.2 In `Executor.java` the overload `execute(Statement statements[0])` is called. This call initially binds the statement through `binder.bind(statements[0])`, yielding no errors for the specified engine. The binder checks table existence, column existence and data type of the constant against the catalog.
+  3.3 In `Executor.java` the planner is called assigning `plan = planner.plan(statements[0])`, yielding the assignment value `Plan(FilterOperator(ScanOperator(tableName = "trips", columns = [ColumnSpec("city", STRING), ColumnSpec("distance", LONG), ColumnSpec("price", DOUBLE)], partitionFiles = [Path.of("data/trips/partition-0.bin")]), RowPredicate(columnIndex = 1, comparison = Comparison.GREATER_THAN, constant = 100L, columnType = LONG)), ScanStats(partitionsTotal = 1, partitionsRead = 1, partitionsPruned = 0))`
+  3.4 Then the engine records the scanStats (i.e. pruned partitions) in the log
+  3.5 In `Executor.java` the plan is drained (i.e. executed / run) and keeps track of returned rows. See below description of the communication or the example back-and-forth of the 8 rows in trips.csv below this description.
+    3.4.1 The `Plan` object, when drained, invokes the root Operator (in our case the `FilterOperator`) by calling `open()` on it.
+    3.4.2 The `FilterOperator` object, when opened, will call `open()` on its child, which in our case is the `ScanOperator`. The `ScanOperator` is a leaf / final operator and invokes no further nodes.
+    3.4.3 the `Plan` object then iteratively calls `next()` on the root Operator (in our case the `FilterOperator`) until receiving the value `null` in return.
+    3.4.4 The `FilterOperator` object, when called to `next()`, will call `next()` on its child `ScanOperator` and evaluate the `RowPredicate`. if it holds, it will return to its caller (the `Plan` object), otherwise it will repeat. If the child returns `null`, it will also return `null` to its parent.
+    3.4.5 The `ScanOperator` object, when called to `next()`, reads the next partition (from the list of partitions on initialization) if no more data is in the loaded partition and then simply return the next row of the partition. If no more partitions can be read, returns `null`.
+    3.4.6 At last, everything is closed nestedly
+4. In `Engine.java` the return CSV value from execution is written to `out`
+
+```mermaid
+sequenceDiagram
+    actor Plan as Plan<br/>drain()
+    participant Filter as FilterOperator
+    participant Scan as ScanOperator
+
+    Plan->>Filter: open()
+    Filter->>Scan: open()
+    Scan-->>Filter: ready
+    Filter-->>Plan: ready
+
+    Plan->>Filter: next()
+    Filter->>Scan: next()
+    Scan-->>Filter: [Copenhagen, 12, 23.5]
+    Note over Filter: 12 > 100? no
+    Filter->>Scan: next()
+    Scan-->>Filter: [Aarhus, 187, 301.0]
+    Note over Filter: 187 > 100? yes
+    Filter-->>Plan: [Aarhus, 187, 301.0]
+
+    Plan->>Filter: next()
+    Filter->>Scan: next()
+    Scan-->>Filter: [Odense, 95, 120.75]
+    Note over Filter: 95 > 100? no
+    Filter->>Scan: next()
+    Scan-->>Filter: [Copenhagen, 140, 210.0]
+    Note over Filter: 140 > 100? yes
+    Filter-->>Plan: [Copenhagen, 140, 210.0]
+
+    Plan->>Filter: next()
+    Filter->>Scan: next()
+    Scan-->>Filter: [Aalborg, 210, 340.5]
+    Note over Filter: 210 > 100? yes
+    Filter-->>Plan: [Aalborg, 210, 340.5]
+
+    Plan->>Filter: next()
+    Filter->>Scan: next()
+    Scan-->>Filter: [Roskilde, 31, 45.0]
+    Note over Filter: 31 > 100? no
+    Filter->>Scan: next()
+    Scan-->>Filter: [Copenhagen, 88, 99.99]
+    Note over Filter: 88 > 100? no
+    Filter->>Scan: next()
+    Scan-->>Filter: [Esbjerg, 299, 450.25]
+    Note over Filter: 299 > 100? yes
+    Filter-->>Plan: [Esbjerg, 299, 450.25]
+
+    Plan->>Filter: next()
+    Filter->>Scan: next()
+    Scan-->>Filter: null
+    Filter-->>Plan: null
+
+    Plan->>Filter: close()
+    Filter->>Scan: close()
+```
