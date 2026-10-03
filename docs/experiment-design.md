@@ -21,4 +21,14 @@ The plot will then be maxRowsPerPartition on the x-axis, throughput on the y-axi
 
 ## Procedure: describe data generation, the values you vary, the number of repetitions, whether you include or exclude the first cold run, the machine, JVM version, and heap size.
 
+We generate one shuffled CSV per table size, same schema and same value distributions on the columns we filter on, so a predicate with a fixed result-fraction stays comparable across the grid. Each cell is then: start an engine with that `maxRowsPerPartition`, `CREATE` + `COPY` the matching CSV, then time only the `SELECT` (ingest stays out of the throughput number).
+
+We sweep the 8 × 8 grid above. If we have time we run each cell 3 times, drop the first as a cold run, and average the other two; if we do not, one warm run after a dummy `SELECT` is fine.
+When the 'masRowsPerPartition' grows larger than the table size (for the smaller tables) we will not produce any additional experiments as they would be redundant.
+
+We will note the machine, OS, and `java -version` (the project is Java 25) in the report. Heap stays the JVM default unless the 1.000.000-row `COPY` OOMs, in which case we bump it once and write that down.
+
 ## Hypothesis: state it before the first run, and quantify it where possible. "Sorted input halves the partitions read at every partition size" is informative. "Pruning improves" is less informative.
+
+Because the tables are shuffled, we expect pruning to die as partitions get bigger: at `maxRowsPerPartition = 8` a selective predicate should skip a large share of files and at 32.768 we expect almost every partition's min/max to cover the constant, so we choose to read vast majority of fractions.
+Throughput vs partition size should therefore rise at first (fewer tiny files) and then flatten or drop once pruning stops helping, and that drop should be most visible on the 500.000 / 1.000.000 series, not on the 500-row ones.
