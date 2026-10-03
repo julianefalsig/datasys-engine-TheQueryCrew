@@ -46,6 +46,7 @@ public final class Planner {
             }
             int total = catalog.partitions.size();
             ScanStats stats = new ScanStats(total, total, 0); // all partitions read
+            logScanStats(tableName, stats);
             return new Plan(new ScanOperator(tableName, columns, allPartitions), stats);
         }
 
@@ -82,12 +83,18 @@ public final class Planner {
 
         int partitionsKept = surviving.size();
         ScanStats stats = new ScanStats(partitionsTotal, partitionsKept, partitionsPruned);
+        logScanStats(tableName, stats);
 
         // Build the plan from the leaf -> root.
         Operator scan = new ScanOperator(tableName, columns, surviving);
         RowPredicate rowPredicate = new RowPredicate(
                 columnIndex, comparison, constant, predicateColumn.type());
         return new Plan(new FilterOperator(scan, rowPredicate), stats);
+    }
+
+    private static void logScanStats(String tableName, ScanStats stats) {
+        LOGGER.debug("op=select table={} partitionsTotal={} partitionsRead={} partitionsPruned={}",
+                csvSafe(tableName), stats.partitionsTotal(), stats.partitionsRead(), stats.partitionsPruned());
     }
 
     private static int columnIndex(List<ColumnSpec> columns, String columnName, String tableName) {

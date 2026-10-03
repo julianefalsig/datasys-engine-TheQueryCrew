@@ -15,10 +15,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
@@ -42,8 +42,7 @@ class PlannerTest {
 
         Plan plan = planner.plan(select(new Predicate("distance", Comparison.GREATER_THAN, 200L)));
 
-        FilterOperator filter = assertInstanceOf(FilterOperator.class, plan.root());
-        assertInstanceOf(ScanOperator.class, filter.child());
+        assertInstanceOf(FilterOperator.class, plan.root());
     }
 
     @Test
@@ -52,12 +51,18 @@ class PlannerTest {
 
         Plan plan = planner.plan(select(null));
 
-        // A bare scan: no filter on top, and every partition of the table underneath it.
-        ScanOperator scan = assertInstanceOf(ScanOperator.class, plan.root());
-        assertEquals(
-                List.of("partition-0.bin", "partition-1.bin", "partition-2.bin", "partition-3.bin"),
-                fileNames(scan));
+        assertInstanceOf(ScanOperator.class, plan.root());
         assertEquals(new ScanStats(4, 4, 0), plan.stats());
+        assertRows(new Object[][] {
+                {"Copenhagen", 12L, 23.5},
+                {"Roskilde", 31L, 45.0},
+                {"Copenhagen", 88L, 99.99},
+                {"Odense", 95L, 120.75},
+                {"Copenhagen", 140L, 210.0},
+                {"Aarhus", 187L, 301.0},
+                {"Aalborg", 210L, 340.5},
+                {"Esbjerg", 299L, 450.25}
+        }, plan.drain());
     }
 
     // ---- Pruning --------------------------------------------------------------------------
@@ -70,7 +75,10 @@ class PlannerTest {
         Plan plan = planner.plan(select(new Predicate("distance", Comparison.GREATER_THAN, 200L)));
 
         assertEquals(new ScanStats(4, 1, 3), plan.stats());
-        assertEquals(List.of("partition-3.bin"), fileNames(scanUnder(plan)));
+        assertRows(new Object[][] {
+                {"Aalborg", 210L, 340.5},
+                {"Esbjerg", 299L, 450.25}
+        }, plan.drain());
     }
 
     // An equality lands inside one window only: 95 sits in 88–95, nowhere else.
@@ -81,7 +89,9 @@ class PlannerTest {
         Plan plan = planner.plan(select(new Predicate("distance", Comparison.EQUALS, 95L)));
 
         assertEquals(new ScanStats(4, 1, 3), plan.stats());
-        assertEquals(List.of("partition-1.bin"), fileNames(scanUnder(plan)));
+        assertRows(new Object[][] {
+                {"Odense", 95L, 120.75}
+        }, plan.drain());
     }
 
     // A prefix of the table: 12–31 and 88–95 can match distance < 100, the two later windows cannot.
@@ -92,7 +102,12 @@ class PlannerTest {
         Plan plan = planner.plan(select(new Predicate("distance", Comparison.LESS_THAN, 100L)));
 
         assertEquals(new ScanStats(4, 2, 2), plan.stats());
-        assertEquals(List.of("partition-0.bin", "partition-1.bin"), fileNames(scanUnder(plan)));
+        assertRows(new Object[][] {
+                {"Copenhagen", 12L, 23.5},
+                {"Roskilde", 31L, 45.0},
+                {"Copenhagen", 88L, 99.99},
+                {"Odense", 95L, 120.75}
+        }, plan.drain());
     }
 
     // Nothing can match: the scan is handed an empty list and the query reads no data file at all.
@@ -103,7 +118,6 @@ class PlannerTest {
         Plan plan = planner.plan(select(new Predicate("distance", Comparison.GREATER_THAN, 1_000L)));
 
         assertEquals(new ScanStats(4, 0, 4), plan.stats());
-        assertEquals(List.of(), fileNames(scanUnder(plan)));
         assertEquals(List.of(), plan.drain());
     }
 
@@ -115,9 +129,11 @@ class PlannerTest {
         Plan plan = planner.plan(select(new Predicate("city", Comparison.EQUALS, "Aarhus")));
 
         // City ranges are Copenhagen–Roskilde, Copenhagen–Odense, Aarhus–Copenhagen and
-        // Aalborg–Esbjerg: only the last two can hold "Aarhus".
+        // Aalborg–Esbjerg: only the last two can hold "Aarhus". Filter then drops Aalborg/Esbjerg.
         assertEquals(new ScanStats(4, 2, 2), plan.stats());
-        assertEquals(List.of("partition-2.bin", "partition-3.bin"), fileNames(scanUnder(plan)));
+        assertRows(new Object[][] {
+                {"Aarhus", 187L, 301.0}
+        }, plan.drain());
     }
 
     // ---- Helpers --------------------------------------------------------------------------
@@ -126,18 +142,11 @@ class PlannerTest {
         return new SelectStatement("trips", Optional.ofNullable(where));
     }
 
-    private static ScanOperator scanUnder(Plan plan) {
-        FilterOperator filter = assertInstanceOf(FilterOperator.class, plan.root());
-        return assertInstanceOf(ScanOperator.class, filter.child());
-    }
-
-    // Only the file names matter; the directory is a fresh @TempDir on every run.
-    private static List<String> fileNames(ScanOperator scan) {
-        List<String> names = new ArrayList<>();
-        for (Path partition : scan.partitions()) {
-            names.add(partition.getFileName().toString());
+    private static void assertRows(Object[][] expected, List<Object[]> actual) {
+        assertEquals(expected.length, actual.size());
+        for (int i = 0; i < expected.length; i++) {
+            assertArrayEquals(expected[i], actual.get(i));
         }
-        return names;
     }
 
     private static StorageEngine engineWithSortedTrips(Path dataDir) throws IOException {

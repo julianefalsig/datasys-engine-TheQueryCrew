@@ -76,11 +76,7 @@ public final class Executor {
                 engine.copyFile(copy.tableName(), copy.csvFilePath());
                 yield null;
             }
-            case SelectStatement select -> {
-                Plan plan = planner.plan(select);
-                engine.recordScanStats(plan.stats());
-                yield plan.drain();
-            }
+            case SelectStatement select -> planner.plan(select).drain();
         };
     }
 }

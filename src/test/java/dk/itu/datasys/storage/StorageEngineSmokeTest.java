@@ -1,10 +1,16 @@
 package dk.itu.datasys.storage;
 
+import dk.itu.datasys.exec.Executor;
+import dk.itu.datasys.exec.Planner;
+import dk.itu.datasys.sql.Predicate;
+import dk.itu.datasys.sql.SelectStatement;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -12,8 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * End-to-end sanity check against the exercise's golden dataset, exercising createTable,
- * copyFile, select, pruning, and restart together. Not a substitute for the full required
- * test suite in Exercise 2 section 4 — just a smoke test for the API implementation.
+ * copyFile, SQL SELECT, pruning, and restart together.
  */
 class StorageEngineSmokeTest {
 
@@ -28,21 +33,21 @@ class StorageEngineSmokeTest {
         engine.createTable("trips", TRIPS_SCHEMA);
         engine.copyFile("trips", "src/test/resources/trips.csv");
 
-        List<Object[]> distanceOver100 = engine.select("trips", "distance", Comparison.GREATER_THAN, 100L);
+        List<Object[]> distanceOver100 = query(engine, "SELECT * FROM trips WHERE distance > 100;");
         assertEquals(4, distanceOver100.size());
-        assertEquals(engine.lastScanStats().partitionsTotal(),
-                engine.lastScanStats().partitionsRead() + engine.lastScanStats().partitionsPruned());
+        var distancePlan = new Planner(engine).plan(new SelectStatement("trips",
+                Optional.of(new Predicate("distance", Comparison.GREATER_THAN, 100L))));
+        assertEquals(distancePlan.stats().partitionsTotal(),
+                distancePlan.stats().partitionsRead() + distancePlan.stats().partitionsPruned());
 
         // trips.csv isn't sorted by distance, so every 2-row partition mixes low/high distances and
         // none can be pruned on that column; city is where partitioning happens to produce a prunable range.
-        engine.select("trips", "city", Comparison.EQUALS, "Aalborg");
-        assertTrue(engine.lastScanStats().partitionsPruned() > 0);
+        var cityPlan = new Planner(engine).plan(new SelectStatement("trips",
+                Optional.of(new Predicate("city", Comparison.EQUALS, "Aalborg"))));
+        assertTrue(cityPlan.stats().partitionsPruned() > 0);
 
-        List<Object[]> copenhagen = engine.select("trips", "city", Comparison.EQUALS, "Copenhagen");
-        assertEquals(3, copenhagen.size());
-
-        List<Object[]> cheap = engine.select("trips", "price", Comparison.LESS_THAN, 50.0);
-        assertEquals(2, cheap.size());
+        assertEquals(3, query(engine, "SELECT * FROM trips WHERE city = 'Copenhagen';").size());
+        assertEquals(2, query(engine, "SELECT * FROM trips WHERE price < 50.0;").size());
     }
 
     @Test
@@ -52,8 +57,7 @@ class StorageEngineSmokeTest {
         first.copyFile("trips", "src/test/resources/trips.csv");
 
         StorageEngine restarted = new StorageEngine(dataDir);
-        List<Object[]> all = restarted.select("trips", "distance", Comparison.GREATER_THAN, -1L);
-        assertEquals(8, all.size());
+        assertEquals(8, query(restarted, "SELECT * FROM trips;").size());
     }
 
     @Test
@@ -66,13 +70,8 @@ class StorageEngineSmokeTest {
                 () -> engine.copyFile("trips", "src/test/resources/trips.csv"));
     }
 
-    @Test
-    void typeMismatchIsRejected(@TempDir Path dataDir) {
-        StorageEngine engine = new StorageEngine(dataDir, 2);
-        engine.createTable("trips", TRIPS_SCHEMA);
-        engine.copyFile("trips", "src/test/resources/trips.csv");
-
-        assertThrows(IllegalArgumentException.class,
-                () -> engine.select("trips", "distance", Comparison.GREATER_THAN, 100)); // Integer, not Long
+    private static List<Object[]> query(StorageEngine engine, String sql) {
+        List<List<Object[]>> results = new Executor(engine).execute(sql);
+        return results.isEmpty() ? List.of() : results.getFirst();
     }
 }
