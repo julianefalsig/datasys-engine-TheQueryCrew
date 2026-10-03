@@ -1,6 +1,6 @@
 # datasys-engine-TheQueryCrew
 
-A small SQL engine built for ITU’s *How to Build Data Systems* (Fall 2026), team **The Query Crew**. The stack is Java 25 and Maven. ANTLR 4 generates the lexer/parser from `src/main/antlr4/dk/itu/datasys/sql/Sql.g4` on `mvn compile`; generated Java lands in `target/generated-sources/antlr4` and is not committed. SQL text parses to a typed AST (`CREATE TABLE` / `COPY` / `SELECT`). A planner turns a bound `SELECT` into a Volcano pipeline (`Scan` → optional `Filter`), pruning partitions from catalog min/max before any data file opens. An executor runs `parse → bind → plan → execute` statement by statement. The storage API can create a table, `COPY` a headerless CSV into a custom columnar binary format, and `SELECT` (same week-2 signature) which now plans and drains that pipeline internally. Catalogs are JSON (Jackson); data files are our own binary format.
+A small SQL engine built for ITU’s *How to Build Data Systems* (Fall 2026), team **The Query Crew**. The stack is Java 25 and Maven. ANTLR 4 generates the lexer/parser from `src/main/antlr4/dk/itu/datasys/sql/Sql.g4` on `mvn compile`; generated Java lands in `target/generated-sources/antlr4` and is not committed. SQL text parses to a typed AST (`CREATE TABLE` / `COPY` / `SELECT`). A planner turns a bound `SELECT` into a Volcano pipeline (`Scan` → optional `Filter`), pruning partitions from catalog min/max before any data file opens. An executor runs `parse → bind → plan → execute` statement by statement. The storage API creates a table and `COPY`s a headerless CSV into a custom columnar binary format; `SELECT` is planned and drained by `Executor`. Catalogs are JSON (Jackson); data files are our own binary format.
 
 `mvn test` runs `*Test` unit tests (Surefire). `mvn verify` also runs `*IT` integration tests (Failsafe).
 
@@ -29,7 +29,6 @@ Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
 |---|---|
 | `src/main/antlr4/dk/itu/datasys/sql/Sql.g4` | Grammar for the Exercise 3 SQL subset. Path under `antlr4/` is the generated Java package. |
 | `src/main/java/dk/itu/datasys/sql/SqlAstBuilder.java` | Visitor: ANTLR parse tree → AST records. Types literals as `String` / `Long` / `Double`. |
-| `src/main/java/dk/itu/datasys/sql/SqlPrinter.java` | AST → SQL text; `parse(print(s))` yields an equal statement. |
 | `src/main/java/dk/itu/datasys/sql/Statement.java` | Sealed AST root: `CreateTableStatement`, `CopyStatement`, `SelectStatement`. |
 | `src/main/java/dk/itu/datasys/sql/CreateTableStatement.java` | `CREATE TABLE` (name + `ColumnSpec` list). |
 | `src/main/java/dk/itu/datasys/sql/CopyStatement.java` | `COPY … FROM 'path'`. |
@@ -53,11 +52,11 @@ Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
 
 | File | Role |
 |---|---|
-| `src/main/java/dk/itu/datasys/storage/StorageEngine.java` | Storage API: `createTable`, `copyFile`, `select` / `lastScanStats` (Exercise 2; plans + drains), `schema`/`catalog` for binder and planner. The CLI SELECT path uses `Executor` instead of `select`. |
+| `src/main/java/dk/itu/datasys/storage/StorageEngine.java` | Storage API: `createTable`, `copyFile`, `schema`/`catalog` for binder and planner. |
 | `src/main/java/dk/itu/datasys/storage/ColumnType.java` | Column types: `STRING`, `LONG`, `DOUBLE`, and which Java value each accepts. |
 | `src/main/java/dk/itu/datasys/storage/ColumnSpec.java` | One schema column (name + type). Also stored in the catalog JSON. |
 | `src/main/java/dk/itu/datasys/storage/Comparison.java` | Predicate ops: `EQUALS`, `LESS_THAN`, `GREATER_THAN`, and the row test `matches(value, constant, type)`. |
-| `src/main/java/dk/itu/datasys/storage/ScanStats.java` | How many partitions a `select` saw, read, and pruned. |
+| `src/main/java/dk/itu/datasys/storage/ScanStats.java` | How many partitions a planned SELECT saw, read, and pruned. |
 | `src/main/java/dk/itu/datasys/storage/CatalogData.java` | In-memory / JSON catalog: schema, `maxRowsPerPartition`, partitions and typed min/max. |
 | `src/main/java/dk/itu/datasys/storage/CatalogStore.java` | Reads and writes `catalog.json` under each table directory. |
 | `src/main/java/dk/itu/datasys/storage/PartitionFile.java` | Binary layout of one partition file (magic, version, offset table, column chunks). Only `readAllColumns` is open outside the package; writing stays with `copyFile`, so every file has a catalog entry. |
@@ -73,14 +72,13 @@ Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
 | `src/test/java/dk/itu/datasys/EngineTest.java` | Unit test for the team-name helper. |
 | `src/test/java/dk/itu/datasys/EngineFrontDoorIT.java` | Front door: script → headerless CSV on stdout; failing script → stderr only. |
 | `src/test/java/dk/itu/datasys/SqlParserTest.java` | Parser unit tests: statement shapes, literals, case, malformed line/col, comments. |
-| `src/test/java/dk/itu/datasys/sql/SqlPrinterTest.java` | Pretty-printer round-trip over every statement shape. |
 | `src/test/java/dk/itu/datasys/storage/ValueCodecTest.java` | Encode/decode round trip per column type. |
 | `src/test/java/dk/itu/datasys/storage/ColumnStatsTest.java` | Min/max over a column. |
 | `src/test/java/dk/itu/datasys/storage/PrunerTest.java` | Partition prune-or-read decisions. |
 | `src/test/java/dk/itu/datasys/storage/CsvParserTest.java` | Headerless CSV line parsing. |
 | `src/test/java/dk/itu/datasys/storage/StorageEngineSmokeTest.java` | End-to-end smoke test on the golden `trips.csv` data. |
 | `src/test/java/dk/itu/datasys/sql/BinderIT.java` | Binder + `StorageEngine` on `@TempDir` (exercise 3.7). |
-| `src/test/java/dk/itu/datasys/storage/StorageEngineIT.java` | Required Exercise 2 integration tests against `StorageEngine`. |
+| `src/test/java/dk/itu/datasys/storage/StorageEngineIT.java` | Storage + SQL SELECT integration tests (create/copy/persist/prune). |
 | `src/test/java/dk/itu/datasys/storage/ColumnTypeTest.java` | Which Java value each column type accepts. |
 | `src/test/java/dk/itu/datasys/exec/FilterOperatorTest.java` | Filter over a stub child, including lexicographic `STRING` order and exhaustion. |
 | `src/test/java/dk/itu/datasys/exec/ScanOperatorTest.java` | Scan over real partition files, including the fully pruned empty-partition case. |
@@ -97,7 +95,6 @@ flowchart TD
   SqlParseException
   subgraph sqlPkg ["dk.itu.datasys.sql"]
     SqlAstBuilder
-    SqlPrinter
     Binder
     Statement
     CreateTableStatement
@@ -131,7 +128,6 @@ flowchart TD
   Engine --> Executor
   Engine --> StorageEngine
   SqlParser --> SqlAstBuilder
-  SqlPrinter --> Statement
   Binder --> Statement
   Binder --> StorageEngine
   SqlParser --> SqlParseException
@@ -149,9 +145,6 @@ flowchart TD
   StorageEngine --> CsvParser
   StorageEngine --> ColumnStats
   StorageEngine --> ColumnSpec
-  StorageEngine --> Comparison
-  StorageEngine --> ScanStats
-  StorageEngine --> Planner
   CatalogStore --> CatalogData
   CatalogData --> ColumnSpec
   PartitionFile --> ValueCodec
