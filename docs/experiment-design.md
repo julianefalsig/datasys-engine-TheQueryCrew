@@ -26,7 +26,7 @@ We generate one shuffled CSV per table size, same schema and same value distribu
 We sweep the 8 × 8 grid above. If we have time we run each cell 3 times, drop the first as a cold run, and average the other two; if we do not, one warm run after a dummy `SELECT` is fine.
 When the 'masRowsPerPartition' grows larger than the table size (for the smaller tables) we will not produce any additional experiments as they would be redundant.
 
-We will note the machine, OS, and `java -version` (the project is Java 25) in the report. Heap stays the JVM default unless the 1.000.000-row `COPY` OOMs, in which case we bump it once and write that down.
+We will note the machine, OS, and `java -version` (the project is Java 25) in the report. Heap stays the JVM default unless the 1.000.000-row `COPY` fails, in which case we bump it once and write that down.
 
 ## Hypothesis: state it before the first run, and quantify it where possible. "Sorted input halves the partitions read at every partition size" is informative. "Pruning improves" is less informative.
 
