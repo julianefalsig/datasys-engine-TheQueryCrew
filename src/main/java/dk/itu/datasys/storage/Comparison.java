@@ -1,7 +1,5 @@
 package dk.itu.datasys.storage;
 
-import java.util.Comparator;
-
 public enum Comparison {
     EQUALS, LESS_THAN, GREATER_THAN;
 

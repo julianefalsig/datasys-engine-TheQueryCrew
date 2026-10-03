@@ -53,7 +53,7 @@ Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
 
 | File | Role |
 |---|---|
-| `src/main/java/dk/itu/datasys/storage/StorageEngine.java` | Storage API: `createTable`, `copyFile`, `select` (plans + drains), `schema`/`catalog` for binder and planner. |
+| `src/main/java/dk/itu/datasys/storage/StorageEngine.java` | Storage API: `createTable`, `copyFile`, `select` / `lastScanStats` (Exercise 2; plans + drains), `schema`/`catalog` for binder and planner. The CLI SELECT path uses `Executor` instead of `select`. |
 | `src/main/java/dk/itu/datasys/storage/ColumnType.java` | Column types: `STRING`, `LONG`, `DOUBLE`, and which Java value each accepts. |
 | `src/main/java/dk/itu/datasys/storage/ColumnSpec.java` | One schema column (name + type). Also stored in the catalog JSON. |
 | `src/main/java/dk/itu/datasys/storage/Comparison.java` | Predicate ops: `EQUALS`, `LESS_THAN`, `GREATER_THAN`, and the row test `matches(value, constant, type)`. |
