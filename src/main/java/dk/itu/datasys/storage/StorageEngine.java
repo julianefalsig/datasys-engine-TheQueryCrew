@@ -1,10 +1,5 @@
 package dk.itu.datasys.storage;
 
-import dk.itu.datasys.exec.Plan;
-import dk.itu.datasys.exec.Planner;
-import dk.itu.datasys.sql.Predicate;
-import dk.itu.datasys.sql.SelectStatement;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -19,7 +14,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -31,7 +25,6 @@ public final class StorageEngine {
     private final Path dataDirectory;
     private final int defaultMaxRowsPerPartition;
     private final Map<String, CatalogData> catalogs = new ConcurrentHashMap<>();
-    private volatile ScanStats lastScanStats;
 
     public StorageEngine(Path dataDirectory) {
         this(dataDirectory, DEFAULT_MAX_ROWS_PER_PARTITION);
@@ -155,40 +148,6 @@ public final class StorageEngine {
         catalog.partitions.add(new CatalogData.Partition(dataFileName, partitionRows.size(), statsByColumn));
     }
 
-    public List<Object[]> select(String tableName, String columnName, Comparison comparison, Object constant) {
-        long start = System.currentTimeMillis();
-        try {
-            CatalogData catalog = requireCatalog(tableName);
-            ColumnSpec predicateColumn = null;
-            for (ColumnSpec column : catalog.columns) {
-                if (column.name().equals(columnName)) {
-                    predicateColumn = column;
-                    break;
-                }
-            }
-            if (predicateColumn == null) {
-                throw new IllegalArgumentException("unknown column: " + columnName + " on table " + tableName);
-            }
-            requireMatchingType(predicateColumn, constant);
-
-            SelectStatement statement = new SelectStatement(
-                    tableName, Optional.of(new Predicate(columnName, comparison, constant)));
-            Plan plan = new Planner(this).plan(statement);
-            lastScanStats = plan.stats();
-            List<Object[]> results = plan.drain();
-
-            long durationMs = System.currentTimeMillis() - start;
-            LOGGER.debug("op=select table={} column={} comparison={} const={} partitionsRead={} partitionsPruned={} rowsOut={} durationMs={}",
-                    csvSafe(tableName), csvSafe(columnName), comparison, csvSafe(constant),
-                    plan.stats().partitionsRead(), plan.stats().partitionsPruned(), results.size(), durationMs);
-
-            return results;
-        } catch (RuntimeException e) {
-            throw failed("select", "table=%s column=%s comparison=%s const=%s durationMs=%d"
-                    .formatted(tableName, columnName, comparison, constant, System.currentTimeMillis() - start), e);
-        }
-    }
-
     //method used for the binder. The table's schema, in column order. Throws IllegalArgumentException if the table is unknown.
 
     public List<ColumnSpec> schema(String tableName) {
@@ -211,17 +170,6 @@ public final class StorageEngine {
         return dataDirectory.resolve(tableName);
     }
 
-    /** Records prune/read stats from the most recent planned SELECT. */
-    public void recordScanStats(ScanStats stats) {
-        this.lastScanStats = stats;
-    }
-
-    /** Pruning stats from the most recent {@link #select}, so pruning decisions are observable beyond the log. */
-    public ScanStats lastScanStats() {
-        return lastScanStats;
-    }
-
-
     private static <E extends RuntimeException> E failed(String op, String context, E e) {
         LOGGER.error("op={} {} outcome=FAILED error={} message={}",
                 op, csvSafe(context), e.getClass().getSimpleName(), csvSafe(e.getMessage()));
@@ -238,14 +186,6 @@ public final class StorageEngine {
             throw new IllegalArgumentException("unknown table: " + tableName);
         }
         return catalog;
-    }
-
-    private static void requireMatchingType(ColumnSpec column, Object constant) {
-        if (!column.type().accepts(constant)) {
-            throw new IllegalArgumentException(
-                    "constant type %s does not match column %s of type %s"
-                            .formatted(constant.getClass().getSimpleName(), column.name(), column.type()));
-        }
     }
 
     private static List<Object[]> readCsv(String csvFilePath, List<ColumnSpec> columns) {

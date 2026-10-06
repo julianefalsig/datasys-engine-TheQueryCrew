@@ -1,5 +1,10 @@
 package dk.itu.datasys.storage;
 
+import dk.itu.datasys.exec.Executor;
+import dk.itu.datasys.exec.Planner;
+import dk.itu.datasys.sql.Predicate;
+import dk.itu.datasys.sql.SelectStatement;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -8,6 +13,7 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -40,8 +46,7 @@ class StorageEngineIT {
 
         StorageEngine restarted = new StorageEngine(dataDir);
         assertThrows(IllegalArgumentException.class, () -> restarted.createTable("trips", TRIPS_SCHEMA));
-        List<Object[]> rows = restarted.select("trips", "distance", Comparison.GREATER_THAN, -1L);
-        assertEquals(List.of(), rows);
+        assertEquals(List.of(), query(restarted, "SELECT * FROM trips;"));
     }
 
     @Test
@@ -54,8 +59,7 @@ class StorageEngineIT {
     @Test
     void roundTrip(@TempDir Path dataDir) throws IOException {
         StorageEngine engine = engineWithTrips(dataDir, "trips.csv");
-        List<Object[]> rows = engine.select("trips", "distance", Comparison.GREATER_THAN, -1L);
-        assertRows(ALL_TRIPS, rows);
+        assertRows(ALL_TRIPS, query(engine, "SELECT * FROM trips;"));
     }
 
     @Test
@@ -66,72 +70,66 @@ class StorageEngineIT {
                 {"Copenhagen", 12L, 23.5},
                 {"Copenhagen", 140L, 210.0},
                 {"Copenhagen", 88L, 99.99}
-        }, engine.select("trips", "city", Comparison.EQUALS, "Copenhagen"));
+        }, query(engine, "SELECT * FROM trips WHERE city = 'Copenhagen';"));
 
         assertRows(new Object[][] {
                 {"Aarhus", 187L, 301.0},
                 {"Aalborg", 210L, 340.5}
-        }, engine.select("trips", "city", Comparison.LESS_THAN, "Copenhagen"));
+        }, query(engine, "SELECT * FROM trips WHERE city < 'Copenhagen';"));
 
         assertRows(new Object[][] {
                 {"Odense", 95L, 120.75},
                 {"Roskilde", 31L, 45.0},
                 {"Esbjerg", 299L, 450.25}
-        }, engine.select("trips", "city", Comparison.GREATER_THAN, "Copenhagen"));
+        }, query(engine, "SELECT * FROM trips WHERE city > 'Copenhagen';"));
 
         assertRows(new Object[][] {
                 {"Copenhagen", 140L, 210.0}
-        }, engine.select("trips", "distance", Comparison.EQUALS, 140L));
+        }, query(engine, "SELECT * FROM trips WHERE distance = 140;"));
 
         assertRows(new Object[][] {
                 {"Copenhagen", 12L, 23.5},
                 {"Odense", 95L, 120.75},
                 {"Roskilde", 31L, 45.0},
                 {"Copenhagen", 88L, 99.99}
-        }, engine.select("trips", "distance", Comparison.LESS_THAN, 100L));
+        }, query(engine, "SELECT * FROM trips WHERE distance < 100;"));
 
         assertRows(new Object[][] {
                 {"Aarhus", 187L, 301.0},
                 {"Copenhagen", 140L, 210.0},
                 {"Aalborg", 210L, 340.5},
                 {"Esbjerg", 299L, 450.25}
-        }, engine.select("trips", "distance", Comparison.GREATER_THAN, 100L));
+        }, query(engine, "SELECT * FROM trips WHERE distance > 100;"));
 
         assertRows(new Object[][] {
                 {"Copenhagen", 88L, 99.99}
-        }, engine.select("trips", "price", Comparison.EQUALS, 99.99));
+        }, query(engine, "SELECT * FROM trips WHERE price = 99.99;"));
 
         assertRows(new Object[][] {
                 {"Copenhagen", 12L, 23.5},
                 {"Roskilde", 31L, 45.0}
-        }, engine.select("trips", "price", Comparison.LESS_THAN, 50.0));
+        }, query(engine, "SELECT * FROM trips WHERE price < 50.0;"));
 
         assertRows(new Object[][] {
                 {"Aarhus", 187L, 301.0},
                 {"Aalborg", 210L, 340.5},
                 {"Esbjerg", 299L, 450.25}
-        }, engine.select("trips", "price", Comparison.GREATER_THAN, 300.0));
+        }, query(engine, "SELECT * FROM trips WHERE price > 300.0;"));
     }
 
     @Test
     void emptyResult(@TempDir Path dataDir) throws IOException {
         StorageEngine engine = engineWithTrips(dataDir, "trips.csv");
-        List<Object[]> rows = engine.select("trips", "city", Comparison.EQUALS, "Paris");
-        assertEquals(List.of(), rows);
+        assertEquals(List.of(), query(engine, "SELECT * FROM trips WHERE city = 'Paris';"));
     }
 
     @Test
     void errors(@TempDir Path dataDir) throws IOException {
         StorageEngine engine = engineWithTrips(dataDir, "trips.csv");
-        // unknown table
+        Executor executor = new Executor(engine);
+        assertThrows(IllegalArgumentException.class, () -> executor.execute("SELECT * FROM missing;"));
         assertThrows(IllegalArgumentException.class,
-                () -> engine.select("missing", "distance", Comparison.GREATER_THAN, 100L));
-        // unknown column
-        assertThrows(IllegalArgumentException.class,
-                () -> engine.select("trips", "missing", Comparison.GREATER_THAN, 100L));
-        // wrong data type of constant
-        assertThrows(IllegalArgumentException.class,
-                () -> engine.select("trips", "distance", Comparison.GREATER_THAN, 100));
+                () -> executor.execute("SELECT * FROM trips WHERE missing > 100;"));
     }
 
     @Test
@@ -160,21 +158,21 @@ class StorageEngineIT {
     @Test
     void pruning(@TempDir Path dataDir) throws IOException {
         StorageEngine engine = engineWithTrips(dataDir, "trips_sorted.csv");
+        var plan = new Planner(engine).plan(new SelectStatement("trips",
+                Optional.of(new Predicate("distance", Comparison.GREATER_THAN, 200L))));
 
-        List<Object[]> rows = engine.select("trips", "distance", Comparison.GREATER_THAN, 200L);
-        assertTrue(engine.lastScanStats().partitionsPruned() >= 2);
+        assertTrue(plan.stats().partitionsPruned() >= 2);
         assertRows(new Object[][] {
                 {"Aalborg", 210L, 340.5},
                 {"Esbjerg", 299L, 450.25}
-        }, rows);
+        }, plan.drain());
     }
 
     @Test
     void dataPersistence(@TempDir Path dataDir) throws IOException {
         engineWithTrips(dataDir, "trips.csv");
         StorageEngine restarted = new StorageEngine(dataDir);
-        List<Object[]> rows = restarted.select("trips", "distance", Comparison.GREATER_THAN, -1L);
-        assertRows(ALL_TRIPS, rows);
+        assertRows(ALL_TRIPS, query(restarted, "SELECT * FROM trips;"));
     }
 
     private static StorageEngine engineWithTrips(Path dataDir, String sourceCsv) throws IOException {
@@ -182,6 +180,11 @@ class StorageEngineIT {
         engine.createTable("trips", TRIPS_SCHEMA);
         engine.copyFile("trips", copyResource(dataDir, sourceCsv).toString());
         return engine;
+    }
+
+    private static List<Object[]> query(StorageEngine engine, String sql) {
+        List<List<Object[]>> results = new Executor(engine).execute(sql);
+        return results.isEmpty() ? List.of() : results.getFirst();
     }
 
     private static Path copyResource(Path dataDir, String name) throws IOException {
@@ -207,7 +210,7 @@ class StorageEngineIT {
             assertInstanceOf(Double.class, actual.get(i)[2]);
         }
     }
-    // testing that the columns come back in schema order            
+
     @Test
     void returnsTheColumnsInSchemaOrder(@TempDir Path dataDir) {
         StorageEngine engine = new StorageEngine(dataDir);
@@ -216,7 +219,6 @@ class StorageEngineIT {
         assertEquals(TRIPS_SCHEMA, engine.schema("trips"));
     }
 
-    //testing that an unknown table is an error rather than an empty result
     @Test
     void unknownTableThrows(@TempDir Path dataDir) {
         StorageEngine engine = new StorageEngine(dataDir);
@@ -224,7 +226,6 @@ class StorageEngineIT {
         assertThrows(IllegalArgumentException.class, () -> engine.schema("missing"));
     }
 
-    // testing that List.copyOf is working (returned list cannot be used to change the catalog)
     @Test
     void theReturnedListCannotChangeTheCatalog(@TempDir Path dataDir) {
         StorageEngine engine = new StorageEngine(dataDir);
