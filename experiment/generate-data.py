@@ -13,7 +13,7 @@ One shuffled CSV per table size, all with the trips schema the engine already kn
 The design calls for "matching distributions for relevant fields", so that one fixed predicate
 returns the same fraction of rows at every table size. That is enforced here rather than left to
 sampling: in every file exactly 1% of the rows satisfy `distance > 990`, so the selectivity is 1.00%
-at 500 rows and at 1,000,000 rows alike, and a throughput curve across table sizes is comparable.
+at 5,000 rows and at 10,000,000 rows alike, and a throughput curve across table sizes is comparable.
 
 Randomness comes from splitmix64 written out below, not from Python's `random`. A fixed seed into
 the standard library is only reproducible for a given Python build; this is reproducible for anyone,
@@ -29,7 +29,7 @@ import sys
 SEED = 20261006
 
 # docs/experiment-design.md, "Question and x axis"
-TABLE_SIZES = [500, 1_000, 5_000, 10_000, 50_000, 100_000, 500_000, 1_000_000]
+TABLE_SIZES = [5_000, 10_000, 50_000, 100_000, 500_000, 1_000_000, 5_000_000, 10_000_000]
 
 # The fixed predicate is `distance > THRESHOLD`; distances live in [0, DISTANCE_RANGE).
 SELECTIVITY = 0.01

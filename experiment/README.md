@@ -17,12 +17,12 @@ python3 experiment/generate-data.py          # writes the tables, then verifies 
 python3 experiment/generate-data.py --check  # verifies what is on disk, writes nothing
 ```
 
-Eight files, about 3.5 seconds, 31 MB. Run `--check` before you measure: it fails with exit 1 if a
+Eight files, about a minute, 305 MB. Run `--check` before you measure: it fails with exit 1 if a
 single byte differs from `checksums.txt`, which is what keeps two teammates' runs comparable.
 
 Randomness is splitmix64, written out in the script rather than taken from Python's `random`, so the
 output does not depend on the Python build. In every file exactly 1% of rows satisfy
-`distance > 990` — 5 rows at 500, 10,000 rows at 1,000,000 — so selectivity is held fixed by
+`distance > 990` — 50 rows at 5,000, 100,000 rows at 10,000,000 — so selectivity is held fixed by
 construction and not left to sampling.
 
 ## 2. Build the engine
@@ -44,7 +44,7 @@ from the catalog and do not need the flag again.
 ```bash
 rm -rf data logs/engine.log
 ./engine -c "CREATE TABLE t (city STRING, distance LONG, price DOUBLE);" --max-rows-per-partition 8
-./engine -c "COPY t FROM 'experiment/data/trips-500.csv';"
+./engine -c "COPY t FROM 'experiment/data/trips-5000.csv';"
 ./engine -c "SELECT * FROM t WHERE distance > 990;" > /dev/null
 ```
 
@@ -59,8 +59,8 @@ either way, so the cell repeats a measurement you already have.
 Two lines per cell carry everything:
 
 ```
-Planner,op=select table=t partitionsTotal=63 partitionsRead=5 partitionsPruned=58
-Executor,select_complete rowsOut=5 parseMs=9 bindMs=1 planMs=5 executeMs=0 durationMs=7
+Planner,op=select table=t partitionsTotal=625 partitionsRead=49 partitionsPruned=576
+Executor,select_complete rowsOut=50 parseMs=18 bindMs=2 planMs=36 executeMs=4 durationMs=44
 ```
 
 | Number | Line | Used for |
@@ -97,18 +97,20 @@ differs per machine:
 export ENGINE_JAVA_OPTS=-Xmx2g
 ```
 
+`COPY` holds the whole file in memory, so the 10,000,000-row file may not fit in 2g. If that `COPY` fails, bump the heap once and write down the value you actually used.
+
 Plug the laptop in. The full grid is hundreds of runs, and a MacBook that throttles partway through
 produces a downward drift that looks like a result.
 
 ## Two things that will bite
 
-**`executeMs` has millisecond resolution, and small cells finish inside one millisecond.** The
-500-row cell above reported `executeMs=0`, so `T_in` and `T_out` divide by zero. Either report
-microseconds from the log, or treat the smallest table sizes as unmeasurable and say so. This is the
-one open issue that affects whether the smallest cells can be reported at all.
+**The grid starts at 5,000 rows so `executeMs` is not a zero.** A 500-row cell measured `executeMs=0`,
+and 1,000 rows measured `executeMs=1`. The 5,000-row cell above measured `executeMs=4` on the same
+predicate with `maxRowsPerPartition = 8`, and the larger tables measured higher, so none of the
+eight sizes divide the throughput by zero.
 
-**Pruning does work at small partition sizes, so the curve has a real gradient.** At 500 rows with
-`maxRowsPerPartition = 8`, 58 of 63 partitions were pruned; at 1,000,000 rows with the default
+**Pruning does work at small partition sizes, so the curve has a real gradient.** At 5,000 rows with
+`maxRowsPerPartition = 8`, 576 of 625 partitions were pruned; at 1,000,000 rows with the default
 10,000, none of the 100 were. Shuffled input does not flatten the effect the way we first assumed —
 with 1% selectivity each matching row tends to sit in its own small partition.
 
