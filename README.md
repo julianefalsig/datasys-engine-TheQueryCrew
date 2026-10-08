@@ -46,7 +46,7 @@ Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
 | `src/main/java/dk/itu/datasys/exec/RowPredicate.java` | A `WHERE` by column position rather than name, as the pipeline sees it. |
 | `src/main/java/dk/itu/datasys/exec/Plan.java` | Planned SELECT: operator root plus `ScanStats`; `drain()` pulls all rows. |
 | `src/main/java/dk/itu/datasys/exec/Planner.java` | Bound SELECT → plan; prunes partitions and emits `decision=READ\|PRUNED` log lines (including `reason=noPredicate` when there is no WHERE). |
-| `src/main/java/dk/itu/datasys/exec/Executor.java` | `parse → bind → plan → execute` per statement; CREATE/COPY call storage directly. Counts `statementNumber` into the MDC from 1, back to 0 when the script ends. Logs `create_complete`, `copy_complete`, and `select_complete` on success and `statement_failed` on bind/operator errors. |
+| `src/main/java/dk/itu/datasys/exec/Executor.java` | `parse → bind → plan → execute` per statement; CREATE/COPY call storage directly. Counts `statementNumber` into the MDC from 1, back to 0 when the script ends. Logs `create_complete`, `copy_complete`, and `select_complete` on success (parse/bind/execute timings; SELECT also logs plan) and `statement_failed` on bind/operator errors. |
 
 ### `dk.itu.datasys.storage`
 
@@ -197,7 +197,7 @@ We consider in particular a command-line call `./engine -c "SELECT * FROM trips 
 11:26:08.973 DEBUG Planner - op=select table=trips column=distance comparison=GREATER_THAN const=100 partition=0 min=12 max=299 decision=READ
 11:26:08.975 DEBUG FilterOperator - op=filter rowsIn=8 rowsOut=4
 11:26:08.975 DEBUG ScanOperator - op=scan table=trips partitions=1 rowsOut=8
-11:26:08.975 DEBUG Executor - select_complete rowsOut=4 durationMs=3
+11:26:08.975 DEBUG Executor - select_complete rowsOut=4 parseMs=17 bindMs=0 planMs=1 executeMs=2 durationMs=3
 Aarhus,187,301.0
 Copenhagen,140,210.0
 Aalborg,210,340.5
