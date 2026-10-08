@@ -1,0 +1,12 @@
+date: Thu Oct  8 13:51:06 CEST 2026
+ProductName:		macOS
+ProductVersion:		26.6.2
+BuildVersion:		25G83
+Apple M3
+8
+25769803776
+openjdk version "25.0.2" 2026-01-20
+OpenJDK Runtime Environment Homebrew (build 25.0.2)
+OpenJDK 64-Bit Server VM Homebrew (build 25.0.2, mixed mode, sharing)
+commit: c8cf63a
+ENGINE_JAVA_OPTS: <jvm default>
