@@ -51,8 +51,8 @@ rm -rf data logs/engine.log
 The `SELECT` output goes to `/dev/null` because the measurement is in the log, and 10,000 rows of
 CSV on the terminal is just noise.
 
-Skip the cells where `maxRowsPerPartition` is larger than the table size: the table is one partition
-either way, so the cell repeats a measurement you already have.
+When `maxRowsPerPartition` is at least the table size the table is one partition. The sweep keeps
+the first such size and skips the larger ones, which would repeat that same cell.
 
 ## 4. Read the numbers out of the log
 
@@ -114,8 +114,18 @@ eight sizes divide the throughput by zero.
 10,000, none of the 100 were. Shuffled input does not flatten the effect the way we first assumed —
 with 1% selectivity each matching row tends to sit in its own small partition.
 
-## Not automated yet
+## 6. Run the sweep
 
-There is no sweep runner. Steps 3 and 4 are per cell, and the grid is 64 cells before repetitions,
-so a script that loops the grid, repeats each cell, and writes one row of results per cell is the
-obvious next piece.
+`experiment/run-sweep.sh` loops the grid. Each cell deletes `data/`, creates the table at that
+partition size, copies the matching CSV, then runs the `SELECT` six times. The first run is the
+cold start and is dropped. The row written for the cell is the median, min, and max of the other
+five: `executeMs`, `T_in = rowsIn / executeMs`, and `T_out = rowsOut / executeMs`.
+
+```bash
+experiment/run-sweep.sh                  # full grid; rewrites experiment/results.csv
+experiment/run-sweep.sh 5000 4096        # one cell, same six-run summary
+```
+
+The script also writes `experiment/conditions.txt` once: OS, CPU, memory, `java -version`, the
+commit, and `ENGINE_JAVA_OPTS` (or `<jvm default>` when that is unset). It does not raise the heap
+itself. If the 10,000,000-row `COPY` fails, set `ENGINE_JAVA_OPTS` and start the sweep again.
