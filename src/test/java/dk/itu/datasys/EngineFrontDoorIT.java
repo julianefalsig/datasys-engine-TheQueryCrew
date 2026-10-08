@@ -12,6 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -52,6 +53,35 @@ class EngineFrontDoorIT {
         assertEquals("""
                 Odense,95,120.75
                 """, stdout.toString(StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void maxRowsPerPartitionFlagIsWhatCopyPartitionsBy() throws IOException {
+        Path csv = copyResource("trips.csv");
+        String sql = """
+                CREATE TABLE trips (city STRING, distance LONG, price DOUBLE);
+                COPY trips FROM '%s';
+                SELECT * FROM trips WHERE city = 'Odense';
+                """.formatted(sqlPath(csv));
+
+        ByteArrayOutputStream stdout = new ByteArrayOutputStream();
+        ByteArrayOutputStream stderr = new ByteArrayOutputStream();
+        int exit = Engine.run(
+                new String[] {"-c", sql, "--max-rows-per-partition", "2"},
+                temp.resolve("data"),
+                new PrintStream(stdout, true, StandardCharsets.UTF_8),
+                new PrintStream(stderr, true, StandardCharsets.UTF_8));
+
+        assertEquals(0, exit);
+        assertEquals("""
+                Odense,95,120.75
+                """, stdout.toString(StandardCharsets.UTF_8));
+        try (Stream<Path> partitions = Files.list(temp.resolve("data").resolve("trips"))) {
+            long partitionFiles = partitions
+                    .filter(path -> path.getFileName().toString().startsWith("partition-"))
+                    .count();
+            assertEquals(4, partitionFiles);
+        }
     }
 
     @Test

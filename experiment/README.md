@@ -37,20 +37,13 @@ for exactly this reason.
 
 ## 3. Run one cell
 
-`maxRowsPerPartition` has no command-line flag; `StorageEngine` defaults it to 10,000. But
-`CREATE TABLE` writes it into the table's catalog, and `COPY` reads it from there, so a cell is set
-up by editing the catalog between the two:
+`CREATE TABLE` stores `maxRowsPerPartition` in the catalog, and `COPY` reads it from there. Pass
+the size on the process that creates the table; later `COPY` and `SELECT` processes pick it up
+from the catalog and do not need the flag again.
 
 ```bash
 rm -rf data logs/engine.log
-./engine -c "CREATE TABLE t (city STRING, distance LONG, price DOUBLE);"
-
-python3 -c "
-import json, pathlib
-p = pathlib.Path('data/t/catalog.json'); c = json.loads(p.read_text())
-c['maxRowsPerPartition'] = 8
-p.write_text(json.dumps(c))"
-
+./engine -c "CREATE TABLE t (city STRING, distance LONG, price DOUBLE);" --max-rows-per-partition 8
 ./engine -c "COPY t FROM 'experiment/data/trips-500.csv';"
 ./engine -c "SELECT * FROM t WHERE distance > 990;" > /dev/null
 ```
