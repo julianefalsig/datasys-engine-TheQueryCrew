@@ -68,9 +68,9 @@ class ExecutorLoggingIT {
         assertEquals("0", numberOfLineContaining("statements=4"));
 
         assertEquals("1", numberOfLineContaining("op=createTable"));
-        assertEquals("1", numberOfLineContaining("create_complete"));
+        assertHasParseAndExecute("create_complete");
         assertEquals("2", numberOfLineContaining("op=copyFile table=trips file="));
-        assertEquals("2", numberOfLineContaining("copy_complete"));
+        assertHasParseAndExecute("copy_complete");
 
         // The third statement is a whole pipeline: planner and filter both answer to its number.
         assertEquals("3", numberOfLineContaining("const=Odense"));
@@ -79,6 +79,15 @@ class ExecutorLoggingIT {
         // Both SELECTs scan, and the two scans belong to different statements.
         assertEquals(List.of("3", "4"), numbersOfLinesContaining("op=scan"));
         assertEquals(List.of("3", "4"), numbersOfLinesContaining("select_complete"));
+        List<String> selectSummaries = messagesContaining("select_complete");
+        assertEquals(2, selectSummaries.size());
+        for (String message : selectSummaries) {
+            assertTrue(message.contains("parseMs="), message);
+            assertTrue(message.contains("bindMs="), message);
+            assertTrue(message.contains("planMs="), message);
+            assertTrue(message.contains("executeMs="), message);
+            assertTrue(message.contains("durationMs="), message);
+        }
 
         // Counted from 1, one number per statement, in order, with no gaps and no repeats.
         assertEquals(List.of("0", "1", "2", "3", "4"), numbersInOrderOfFirstAppearance());
@@ -123,6 +132,14 @@ class ExecutorLoggingIT {
 
     // ---- Reading the log -------------------------------------------------------------------
 
+    private void assertHasParseAndExecute(String needle) throws IOException {
+        String[] line = onlyLineContaining(needle);
+        assertTrue(line[6].contains("parseMs="), line[6]);
+        assertTrue(line[6].contains("bindMs="), line[6]);
+        assertTrue(line[6].contains("executeMs="), line[6]);
+        assertTrue(line[6].contains("durationMs="), line[6]);
+    }
+
     /** Field 3 of the CSV log is statementNumber; field 5 is the level; field 7 is the message. */
     private String numberOfLineContaining(String needle) throws IOException {
         return onlyLineContaining(needle)[2];
@@ -137,6 +154,16 @@ class ExecutorLoggingIT {
         }
         assertEquals(1, matches.size(), "expected exactly one line containing: " + needle);
         return matches.getFirst();
+    }
+
+    private List<String> messagesContaining(String needle) throws IOException {
+        List<String> messages = new ArrayList<>();
+        for (String[] fields : myLogLines()) {
+            if (fields[6].contains(needle)) {
+                messages.add(fields[6]);
+            }
+        }
+        return messages;
     }
 
     private List<String> numbersOfLinesContaining(String needle) throws IOException {

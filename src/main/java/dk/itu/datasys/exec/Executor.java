@@ -47,7 +47,9 @@ public final class Executor {
      * falls outside too.
      */
     public List<List<Object[]>> execute(String sql) {
+        long parseStarted = System.nanoTime();
         List<Statement> statements = parser.parse(sql);
+        long parseMs = durationMs(parseStarted);
 
         List<List<Object[]>> selectResults = new ArrayList<>();
         try {
@@ -55,7 +57,7 @@ public final class Executor {
             for (Statement statement : statements) {
                 MDC.put(STATEMENT_NUMBER, String.valueOf(++statementNumber));
                 try {
-                    List<Object[]> rows = execute(statement);
+                    List<Object[]> rows = execute(statement, parseMs);
                     if (rows != null) {
                         selectResults.add(rows);
                     }
@@ -75,27 +77,40 @@ public final class Executor {
      * Binds and runs one statement. Returns the SELECT rows, or {@code null} for DDL/DML with no
      * result set.
      */
-    private List<Object[]> execute(Statement statement) {
+    private List<Object[]> execute(Statement statement, long parseMs) {
         long startedNanos = System.nanoTime();
         binder.bind(statement);
+        long bindMs = durationMs(startedNanos);
         return switch (statement) {
             case CreateTableStatement create -> {
+                long executeStarted = System.nanoTime();
                 engine.createTable(create.tableName(), create.columns());
-                LOGGER.debug("create_complete durationMs={}", durationMs(startedNanos));
+                LOGGER.debug("create_complete parseMs={} bindMs={} executeMs={} durationMs={}",
+                        parseMs, bindMs, durationMs(executeStarted), durationMs(startedNanos));
                 yield null;
             }
             case CopyStatement copy -> {
+                long executeStarted = System.nanoTime();
                 engine.copyFile(copy.tableName(), copy.csvFilePath());
-                LOGGER.debug("copy_complete durationMs={}", durationMs(startedNanos));
+                LOGGER.debug("copy_complete parseMs={} bindMs={} executeMs={} durationMs={}",
+                        parseMs, bindMs, durationMs(executeStarted), durationMs(startedNanos));
                 yield null;
             }
-            case SelectStatement select -> {
-                List<Object[]> rows = planner.plan(select).drain();
-                LOGGER.debug("select_complete rowsOut={} durationMs={}",
-                        rows.size(), durationMs(startedNanos));
-                yield rows;
-            }
+            case SelectStatement select -> executeSelect(select, parseMs, bindMs, startedNanos);
         };
+    }
+
+    private List<Object[]> executeSelect(SelectStatement select, long parseMs, long bindMs, long startedNanos) {
+        long planStarted = System.nanoTime();
+        Plan plan = planner.plan(select);
+        long planMs = durationMs(planStarted);
+        long executeStarted = System.nanoTime();
+        List<Object[]> rows = plan.drain();
+        long executeMs = durationMs(executeStarted);
+        LOGGER.debug(
+                "select_complete rowsOut={} parseMs={} bindMs={} planMs={} executeMs={} durationMs={}",
+                rows.size(), parseMs, bindMs, planMs, executeMs, durationMs(startedNanos));
+        return rows;
     }
 
     private static String operationName(Statement statement) {
