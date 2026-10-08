@@ -8,6 +8,8 @@ import dk.itu.datasys.sql.SelectStatement;
 import dk.itu.datasys.sql.Statement;
 import dk.itu.datasys.storage.StorageEngine;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 
 import java.util.ArrayList;
@@ -18,6 +20,8 @@ import java.util.List;
  * CREATE TABLE and COPY call the storage API directly; SELECT drains a planned operator tree.
  */
 public final class Executor {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(Executor.class);
 
     private static final String STATEMENT_NUMBER = "statementNumber";
 
@@ -43,16 +47,24 @@ public final class Executor {
      * falls outside too.
      */
     public List<List<Object[]>> execute(String sql) {
+        long parseStarted = System.nanoTime();
         List<Statement> statements = parser.parse(sql);
+        long parseMs = durationMs(parseStarted);
 
         List<List<Object[]>> selectResults = new ArrayList<>();
         try {
             int statementNumber = 0;
             for (Statement statement : statements) {
                 MDC.put(STATEMENT_NUMBER, String.valueOf(++statementNumber));
-                List<Object[]> rows = execute(statement);
-                if (rows != null) {
-                    selectResults.add(rows);
+                try {
+                    List<Object[]> rows = execute(statement, parseMs);
+                    if (rows != null) {
+                        selectResults.add(rows);
+                    }
+                } catch (RuntimeException e) {
+                    LOGGER.error("statement_failed operation={} reason={}",
+                            operationName(statement), csvSafe(e.getMessage()));
+                    throw e;
                 }
             }
         } finally {
@@ -65,18 +77,54 @@ public final class Executor {
      * Binds and runs one statement. Returns the SELECT rows, or {@code null} for DDL/DML with no
      * result set.
      */
-    private List<Object[]> execute(Statement statement) {
+    private List<Object[]> execute(Statement statement, long parseMs) {
+        long startedNanos = System.nanoTime();
         binder.bind(statement);
+        long bindMs = durationMs(startedNanos);
         return switch (statement) {
             case CreateTableStatement create -> {
+                long executeStarted = System.nanoTime();
                 engine.createTable(create.tableName(), create.columns());
+                LOGGER.debug("create_complete parseMs={} bindMs={} executeMs={} durationMs={}",
+                        parseMs, bindMs, durationMs(executeStarted), durationMs(startedNanos));
                 yield null;
             }
             case CopyStatement copy -> {
+                long executeStarted = System.nanoTime();
                 engine.copyFile(copy.tableName(), copy.csvFilePath());
+                LOGGER.debug("copy_complete parseMs={} bindMs={} executeMs={} durationMs={}",
+                        parseMs, bindMs, durationMs(executeStarted), durationMs(startedNanos));
                 yield null;
             }
-            case SelectStatement select -> planner.plan(select).drain();
+            case SelectStatement select -> executeSelect(select, parseMs, bindMs, startedNanos);
         };
+    }
+
+    private List<Object[]> executeSelect(SelectStatement select, long parseMs, long bindMs, long startedNanos) {
+        long planStarted = System.nanoTime();
+        Plan plan = planner.plan(select);
+        long planMs = durationMs(planStarted);
+        long executeStarted = System.nanoTime();
+        List<Object[]> rows = plan.drain();
+        LOGGER.debug(
+                "select_complete rowsOut={} parseMs={} bindMs={} planMs={} executeMs={} durationMs={}",
+                rows.size(), parseMs, bindMs, planMs, durationMs(executeStarted), durationMs(startedNanos));
+        return rows;
+    }
+
+    private static String operationName(Statement statement) {
+        return switch (statement) {
+            case SelectStatement ignored -> "SELECT";
+            case CreateTableStatement ignored -> "CREATE";
+            case CopyStatement ignored -> "COPY";
+        };
+    }
+
+    private static long durationMs(long startedNanos) {
+        return (System.nanoTime() - startedNanos) / 1_000_000;
+    }
+
+    private static String csvSafe(Object value) {
+        return value == null ? "none" : String.valueOf(value).replace(',', ';').replaceAll("\\s+", " ");
     }
 }

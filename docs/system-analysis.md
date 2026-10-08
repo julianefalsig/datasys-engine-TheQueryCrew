@@ -22,6 +22,7 @@ We consider in particular a command-line call `./engine -c "SELECT * FROM trips 
 11:26:08.973 DEBUG Planner - op=select table=trips column=distance comparison=GREATER_THAN const=100 partition=0 min=12 max=299 decision=READ
 11:26:08.975 DEBUG FilterOperator - op=filter rowsIn=8 rowsOut=4
 11:26:08.975 DEBUG ScanOperator - op=scan table=trips partitions=1 rowsOut=8
+11:26:08.975 DEBUG Executor - select_complete rowsOut=4 parseMs=17 bindMs=0 planMs=1 executeMs=2 durationMs=3
 Aarhus,187,301.0
 Copenhagen,140,210.0
 Aalborg,210,340.5

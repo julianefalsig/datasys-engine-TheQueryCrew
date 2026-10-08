@@ -41,8 +41,10 @@ public final class Planner {
         // Operator expects a list of Paths to the partition files, we build it here.
         if (select.where().isEmpty()) {
             List<Path> allPartitions = new ArrayList<>(catalog.partitions.size());
-            for (CatalogData.Partition partition : catalog.partitions) {
+            for (int p = 0; p < catalog.partitions.size(); p++) {
+                CatalogData.Partition partition = catalog.partitions.get(p);
                 allPartitions.add(tableDir.resolve(partition.dataFile()));
+                LOGGER.debug("partition={} decision=READ reason=noPredicate", p);
             }
             int total = catalog.partitions.size();
             ScanStats stats = new ScanStats(total, total, 0); // all partitions read
