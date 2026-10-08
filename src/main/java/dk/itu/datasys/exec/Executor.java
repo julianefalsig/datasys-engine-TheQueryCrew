@@ -76,17 +76,41 @@ public final class Executor {
      * result set.
      */
     private List<Object[]> execute(Statement statement) {
+        long startedNanos = System.nanoTime();
         binder.bind(statement);
         return switch (statement) {
             case CreateTableStatement create -> {
                 engine.createTable(create.tableName(), create.columns());
+                LOGGER.debug("create_complete durationMs={}", durationMs(startedNanos));
                 yield null;
             }
             case CopyStatement copy -> {
                 engine.copyFile(copy.tableName(), copy.csvFilePath());
+                LOGGER.debug("copy_complete durationMs={}", durationMs(startedNanos));
                 yield null;
             }
-            case SelectStatement select -> planner.plan(select).drain();
+            case SelectStatement select -> {
+                List<Object[]> rows = planner.plan(select).drain();
+                LOGGER.debug("select_complete rowsOut={} durationMs={}",
+                        rows.size(), durationMs(startedNanos));
+                yield rows;
+            }
         };
+    }
+
+    private static String operationName(Statement statement) {
+        return switch (statement) {
+            case SelectStatement ignored -> "SELECT";
+            case CreateTableStatement ignored -> "CREATE";
+            case CopyStatement ignored -> "COPY";
+        };
+    }
+
+    private static long durationMs(long startedNanos) {
+        return (System.nanoTime() - startedNanos) / 1_000_000;
+    }
+
+    private static String csvSafe(Object value) {
+        return value == null ? "none" : String.valueOf(value).replace(',', ';').replaceAll("\\s+", " ");
     }
 }
