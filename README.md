@@ -206,12 +206,54 @@ cp logs/engine.log logs/snapshot.csv   # COPY writes to engine.log while it read
 ```
 
 The snapshot is what makes the ingest stable: Log4j2 flushes each event as one complete line, so a
-copy of the live file always ends at a line boundary.
+copy of the live file always ends at a line boundary. The `COPY` reports what it read:
 
-Two things to know about the analyses. `11-analyze.sql` carries a `sessionId` from one particular
-run, so look up a current one with `tail -1 logs/snapshot.csv | cut -d, -f2`. And `statementNumber`
-counts from 1 within each session, so `WHERE statementNumber = 2` returns statement 2 of *every*
-session in the file; `sessionId` is what separates them.
+```
+op=copyFile table=logs file=logs/snapshot.csv rows=30 partitions=1 durationMs=4
+```
+
+### What the three analyses answer
+
+**Every failure.** One row, from the second statement of `03-failing.sql`:
+
+```
+$ ./engine -c "SELECT * FROM logs WHERE logLevel = 'ERROR';"
+2026-10-08 10:32:28.919,77409470-...,2,3,ERROR,StorageEngine,op=schema table=missing outcome=FAILED error=IllegalArgumentException message=unknown table: missing
+```
+
+**One session** — one run of the engine, start to stop. This is `03-failing.sql`, so its two
+statements are visible as `statementNumber` 1 and 2, with the engine's own lines at 0:
+
+```
+$ ./engine -c "SELECT * FROM logs WHERE sessionId = '77409470-...';"
+...,0,3,DEBUG,Engine,engine started
+...,0,3,DEBUG,SqlParser,statements=2 durationMs=9
+...,1,3,DEBUG,Planner,op=select table=trips column=city comparison=EQUALS const=Aarhus partition=0 min=Aalborg max=Roskilde decision=READ
+...,1,3,DEBUG,Planner,op=select table=trips partitionsTotal=1 partitionsRead=1 partitionsPruned=0
+...,1,3,DEBUG,FilterOperator,op=filter rowsIn=8 rowsOut=1
+...,1,3,DEBUG,ScanOperator,op=scan table=trips partitions=1 rowsOut=8
+...,2,3,ERROR,StorageEngine,op=schema table=missing outcome=FAILED error=... message=unknown table: missing
+...,0,3,DEBUG,Engine,engine stopped
+```
+
+**One statement** — and this is the query to read carefully. `statementNumber` counts from 1 within
+each session, so statement 2 exists in every run that got that far. Eleven rows come back, from
+three different sessions:
+
+```
+$ ./engine -c "SELECT * FROM logs WHERE statementNumber = 2;"
+ff853b18-...,2,StorageEngine,op=copyFile table=trips file=examples/trips.csv rows=8 partitions=1
+a3b86990-...,2,Planner,op=select table=trips column=distance comparison=GREATER_THAN ...
+a3b86990-...,2,FilterOperator,op=filter rowsIn=8 rowsOut=2
+77409470-...,2,StorageEngine,op=schema table=missing outcome=FAILED ...
+```
+
+Statement 2 was a `COPY` in one run, a `SELECT` in another, and the failing statement in a third.
+`sessionId` is what separates them, and the grammar has one `WHERE` per statement, so narrowing to
+a single statement of a single session is reading rather than querying.
+
+Note also that `11-analyze.sql` carries a `sessionId` from one particular run; look up a current one
+with `tail -1 logs/snapshot.csv | cut -d, -f2`.
 
 ## Tracing a Statement through the Engine
 In order to fully understand to code base, it is useful to look at it from the perspective of a single SELECT statement with a predicate, and investigate what happens throughout class instances and function calls.
