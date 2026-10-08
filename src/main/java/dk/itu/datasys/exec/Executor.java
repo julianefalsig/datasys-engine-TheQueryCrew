@@ -8,6 +8,8 @@ import dk.itu.datasys.sql.SelectStatement;
 import dk.itu.datasys.sql.Statement;
 import dk.itu.datasys.storage.StorageEngine;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 
 import java.util.ArrayList;
@@ -18,6 +20,8 @@ import java.util.List;
  * CREATE TABLE and COPY call the storage API directly; SELECT drains a planned operator tree.
  */
 public final class Executor {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(Executor.class);
 
     private static final String STATEMENT_NUMBER = "statementNumber";
 
@@ -50,9 +54,15 @@ public final class Executor {
             int statementNumber = 0;
             for (Statement statement : statements) {
                 MDC.put(STATEMENT_NUMBER, String.valueOf(++statementNumber));
-                List<Object[]> rows = execute(statement);
-                if (rows != null) {
-                    selectResults.add(rows);
+                try {
+                    List<Object[]> rows = execute(statement);
+                    if (rows != null) {
+                        selectResults.add(rows);
+                    }
+                } catch (RuntimeException e) {
+                    LOGGER.error("statement_failed operation={} reason={}",
+                            operationName(statement), csvSafe(e.getMessage()));
+                    throw e;
                 }
             }
         } finally {
