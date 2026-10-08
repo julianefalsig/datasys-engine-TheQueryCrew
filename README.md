@@ -179,6 +179,40 @@ flowchart TD
 
 `mvn package` writes `target/engine.jar`. `./engine` is the SQL front door: `-c` a statement or script, or `-f` a `.sql` file; SELECT rows as headerless CSV on stdout; storage under `data/`.
 
+## Ingesting the engine's own log
+
+The log is headerless CSV with seven fields — timestamp, `sessionId`, `statementNumber`, thread id,
+log level, class name, message — which is exactly what `COPY` reads. So the engine analyzes its own
+log with no new machinery. The scripts in `examples/` do it in two halves: the first three produce a
+log worth reading, the last two read it back.
+
+| File | Role |
+|---|---|
+| `examples/trips.csv` | The golden data, so the scripts stand on their own. |
+| `examples/01-load.sql` | `CREATE TABLE trips` and `COPY` the CSV into it. |
+| `examples/02-queries.sql` | Three SELECTs: a pruning decision, a filter and a scan per statement. |
+| `examples/03-failing.sql` | One statement that works, then one that does not. Exits 1 on purpose: this is the `ERROR` line to find again. |
+| `examples/10-ingest-logs.sql` | `CREATE TABLE logs` with the seven log fields, and `COPY` a snapshot of the log into it. |
+| `examples/11-analyze.sql` | One session, one statement, every failure. |
+
+```bash
+rm -rf data logs/engine.log            # a clean slate: CREATE TABLE fails on an existing table
+./engine -f examples/01-load.sql
+./engine -f examples/02-queries.sql
+./engine -f examples/03-failing.sql
+cp logs/engine.log logs/snapshot.csv   # COPY writes to engine.log while it reads it
+./engine -f examples/10-ingest-logs.sql
+./engine -f examples/11-analyze.sql
+```
+
+The snapshot is what makes the ingest stable: Log4j2 flushes each event as one complete line, so a
+copy of the live file always ends at a line boundary.
+
+Two things to know about the analyses. `11-analyze.sql` carries a `sessionId` from one particular
+run, so look up a current one with `tail -1 logs/snapshot.csv | cut -d, -f2`. And `statementNumber`
+counts from 1 within each session, so `WHERE statementNumber = 2` returns statement 2 of *every*
+session in the file; `sessionId` is what separates them.
+
 ## Tracing a Statement through the Engine
 In order to fully understand to code base, it is useful to look at it from the perspective of a single SELECT statement with a predicate, and investigate what happens throughout class instances and function calls.
 
@@ -186,7 +220,7 @@ Let's consider the statement `SELECT * FROM trips WHERE distance > 100;` (which 
 
 ```sql
 CREATE TABLE trips (city STRING, distance LONG, price DOUBLE);
-COPY trips FROM 'sources/trips.csv';
+COPY trips FROM 'examples/trips.csv';
 ```
 
 We consider in particular a command-line call `./engine -c "SELECT * FROM trips WHERE distance > 100;"`. This outputs the logs:
