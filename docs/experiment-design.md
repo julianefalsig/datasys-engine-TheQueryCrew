@@ -17,16 +17,27 @@ We think our main metric should be through-put of a specific SELECT-statement wi
 If time allows it, we also think it would be cool to run each experiment 2-3 times to get and average performance.
 To enrich our analyses, we think we may also use statistics such as number of partitions pruned.
 
-The plot will then be maxRowsPerPartition on the x-axis, throughput on the y-axis and 1 series for each table size tested.
+The plot will then be maxRowsPerPartition on the x-axis, throughput on the y-axis and 1 series for each table size tested. The x-axis will have a log-scale to fit the data size exponential increase pattern. This will be noted clearly in the caption in the report or on the legend of the plot.
 
 ## Procedure: describe data generation, the values you vary, the number of repetitions, whether you include or exclude the first cold run, the machine, JVM version, and heap size.
 
-We generate one shuffled CSV per table size, same schema and same value distributions on the columns we filter on, so a predicate with a fixed result-fraction stays comparable across the grid. Each cell is then: start an engine with that `maxRowsPerPartition`, `CREATE` + `COPY` the matching CSV, then time only the `SELECT` (ingest stays out of the throughput number).
+We generate one shuffled CSV per table size, same schema and same value distributions on the columns we filter on, so a predicate with a fixed result-fraction stays comparable across the grid. Each cell is then: start an engine with that `maxRowsPerPartition`, `CREATE` + `COPY` the matching CSV, then time only the `SELECT` (ingest stays out of the throughput number). Calculated by (note that we are looking into the predicate operator in particular when defining Rows-in and Rows-out from the log-lines & that executionMs comes from the log-lines as well and only times the execution itself (excluding parse, bind & plan)):
 
-We sweep the 8 × 8 grid above. If we have time we run each cell 3 times, drop the first as a cold run, and average the other two; if we do not, one warm run after a dummy `SELECT` is fine.
+$$
+T_{in} (r/Ms) = Rows_{in} / executionMs
+
+T_{out} (r/Ms) = Rows_{out} / executionMs
+$$
+
+The `SELECT` statement has a predicate (as it otherwise does not make sense to look into pruning at all). The predicate is fixed, to avoid exponentially increasing the number of experiments needed in limited time.
+
+We sweep the 8 × 8 grid above. If we have time we run each cell 6 times, drop the first as a cold run, and average the other 5;
 When the 'masRowsPerPartition' grows larger than the table size (for the smaller tables) we will not produce any additional experiments as they would be redundant.
+We report Median + min/max range for analyses.
 
 We will note the machine, OS, and `java -version` (the project is Java 25) in the report. Heap stays the JVM default unless the 1.000.000-row `COPY` fails, in which case we bump it once and write that down.
+
+We will run the experiment on one of our MacBooks and specify the the hardware in the report.
 
 ## Hypothesis: state it before the first run, and quantify it where possible. "Sorted input halves the partitions read at every partition size" is informative. "Pruning improves" is less informative.
 
