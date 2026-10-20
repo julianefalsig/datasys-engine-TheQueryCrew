@@ -177,7 +177,7 @@ flowchart TD
   Executor --> StorageEngine
 ```
 
-`mvn package` writes `target/engine.jar`. `./engine` is the SQL front door: `-c` a statement or script, or `-f` a `.sql` file; SELECT rows as headerless CSV on stdout; storage under `data/`.
+`mvn package` writes `target/engine.jar`. `./engine` is the SQL front door: `-c` a statement or script, or `-f` a `.sql` file; SELECT rows as headerless CSV on stdout; storage under `data/`. `--max-rows-per-partition <n>` is the partition size `CREATE TABLE` stores (default 10000); `COPY` uses the value already in the catalog.
 
 ## System analysis
 

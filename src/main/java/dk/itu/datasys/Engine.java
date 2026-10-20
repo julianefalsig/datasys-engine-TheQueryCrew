@@ -8,6 +8,7 @@ import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
@@ -37,8 +38,14 @@ public final class Engine {
         }
 
         final String sql;
+        Integer maxRows = null;
         try {
-            sql = resolveSql(args);
+            int end = args.length;
+            if (args.length >= 2 && "--max-rows-per-partition".equals(args[end - 2])) {
+                maxRows = partitionSize(args[end - 1]);
+                end -= 2;
+            }
+            sql = resolveSql(Arrays.copyOfRange(args, 0, end));
         } catch (IllegalArgumentException e) {
             err.println(e.getMessage());
             printUsage(err);
@@ -52,7 +59,9 @@ public final class Engine {
         MDC.put("statementNumber", "0");
         LOGGER.debug("engine started");
         try {
-            StorageEngine engine = new StorageEngine(dataDir);
+            StorageEngine engine = maxRows == null
+                    ? new StorageEngine(dataDir)
+                    : new StorageEngine(dataDir, maxRows);
             Executor executor = new Executor(engine);
             writeCsv(executor.execute(sql), out);
             return 0;
@@ -63,6 +72,20 @@ public final class Engine {
             LOGGER.debug("engine stopped");
             MDC.clear();
         }
+    }
+
+    /** The flag and its value, when present, are the last two arguments. CREATE TABLE stores the value; COPY reads the catalog. */
+    private static int partitionSize(String text) {
+        final int size;
+        try {
+            size = Integer.parseInt(text);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("--max-rows-per-partition needs a positive integer", e);
+        }
+        if (size < 1) {
+            throw new IllegalArgumentException("--max-rows-per-partition needs a positive integer");
+        }
+        return size;
     }
 
     private static String resolveSql(String[] args) throws IOException {
@@ -96,6 +119,8 @@ public final class Engine {
         dest.println("  (no args)              print this help");
         dest.println("  -c <sql>               execute one SQL statement or script");
         dest.println("  -f <path.sql>          execute a SQL file");
+        dest.println("  --max-rows-per-partition <n>");
+        dest.println("                         comes last; partition size stored by CREATE TABLE (default 10000)");
         dest.println("Data directory defaults to ./data/");
     }
 
