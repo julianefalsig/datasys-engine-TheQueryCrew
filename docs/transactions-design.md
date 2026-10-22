@@ -69,6 +69,16 @@ Format follows `storage-design.md`: the question in bold, our answer indented be
     Note for exercise 8: a scan that remembers *indices* into the catalog breaks when the list is
     swapped under it. It has to hold the partitions themselves.-->
 
+    The statement pins a copy of a partition list for the version, meaning it has
+    a copy of the list in-memory. This ensures the catalog can be safely overwritten
+    with a newer version.
+
+    The statement should pin the catalog version at the start of the planning step.
+    This is the point where partition existence and statistics become important to
+    retain between planning and execution. Since we have no schema-modifications
+    or table deletions, the Binder can operate on an earlier version without impacting
+    the validity of its conclusions for later versions of the same table.
+
 
 4. **Retention:** 
    
@@ -77,6 +87,21 @@ Format follows `storage-design.md`: the question in bold, our answer indented be
     A version must not be dropped while a `SELECT` or `DELETE` still reads it. Defensible answers:
     reference counting · a list of running statements · a fixed number of retained versions.
     Also answer: what does a statement see when it asks for a version that is gone?-->
+    
+    Since our engine always overwrites the catalog.json, no previous versions are
+    retained. As argued in section (1) we do not need time travel and existing runs
+    will hold their referenced catalog in-memory until done. Thus, no previous versions
+    are needed to be retained.
+    The only retention is while the new version are being built but not yet committed.
+    As described in (2) a different reader will also always read either the old
+    or new version, there is no accessible intermediary state, due to the ATOMIC rename.
+
+    A statement asking for a version that is gone should not happen, but if it does
+    it will return a custom error and produce a log line.
+
+    > [!NOTE]
+    > I'm unsure if this fully captures "the gist" of it, since it is not one of
+    > the specified defensible answers ? 
 
 5. **The rewrite set:** 
    
