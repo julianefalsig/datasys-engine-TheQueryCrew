@@ -26,6 +26,10 @@ Format follows `storage-design.md`: the question in bold, our answer indented be
     > We could alternatively make one catalog file per version would keep the history 
     > readable, but needs a retention rule and blocks orphan cleanup. No statement outlives one run of our 
     > engine, so the complexity buys us nothing, but what do you think?? -->
+    > (Mie): I think this makes a lot of sense, since the catalog data of actively
+    > running processes can be held in-memory, and we avoid any overload of handling
+    > some alternate deprecation policy. For the requirements in this course, this
+    > follows a "just in time" paradigm, which I am very much a fan of <3
 
 2. **Commit:** 
    A commit happens in two layers.
@@ -46,6 +50,13 @@ Format follows `storage-design.md`: the question in bold, our answer indented be
     > We could also use a journal (write-ahead log), which is really the safest option
     > and what real databases do, since it survives a power loss too. But it would take
     > quite a bit more code, so maybe it is not needed here?
+    > (Mie): I think this adds too much complexity considering the risk for our
+    > engine; i.e. it is a very particular situation of complete power loss which
+    > will likely be uncommon in our system. Since the behavior would just be that
+    > the system would retain the old catalog file with some extra partition files,
+    > I do not think the "risk" is too high, and the behavior of the system can be
+    > motivated as only being completed actions before power loss.
+    > We can always add some kind of clean-up-on-boot-up/down or a custom command.
 
 3. **Snapshot:** 
 
