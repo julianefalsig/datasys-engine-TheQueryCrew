@@ -57,6 +57,9 @@ Format follows `storage-design.md`: the question in bold, our answer indented be
     > I do not think the "risk" is too high, and the behavior of the system can be
     > motivated as only being completed actions before power loss.
     > We can always add some kind of clean-up-on-boot-up/down or a custom command.
+    > EXTRA: in the slides the write-ahead log is also mentioned as a solution to
+    > overwriting bytes in-place on partitions, we are working with immutable
+    > partitions so far, which do one metadata swap to ref new files
 
 3. **Snapshot:** 
 
@@ -87,7 +90,7 @@ Format follows `storage-design.md`: the question in bold, our answer indented be
     A version must not be dropped while a `SELECT` or `DELETE` still reads it. Defensible answers:
     reference counting · a list of running statements · a fixed number of retained versions.
     Also answer: what does a statement see when it asks for a version that is gone?-->
-    
+
     Since our engine always overwrites the catalog.json, no previous versions are
     retained. As argued in section (1) we do not need time travel and existing runs
     will hold their referenced catalog in-memory until done. Thus, no previous versions
