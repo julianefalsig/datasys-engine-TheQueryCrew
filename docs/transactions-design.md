@@ -163,3 +163,8 @@ Format follows `storage-design.md`: the question in bold, our answer indented be
 points to. They are invisible and harmless, but they waste disk space.
 
 How would we find and clean them up?-->
+
+On start-up / close-down non-referenced partitions are cleaned up.
+This avoids cleaning referenced partitions before they have been used by the workflow
+referencing them, as the processes have not yet started or have already finished
+at the point of which we clean up.
