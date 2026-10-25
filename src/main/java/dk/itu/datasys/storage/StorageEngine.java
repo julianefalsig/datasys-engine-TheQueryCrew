@@ -66,7 +66,8 @@ public final class StorageEngine {
         }
     }
 
-    public void createTable(String tableName, List<ColumnSpec> columns) {
+    /** @return the catalog version committed for {@code tableName} */
+    public int createTable(String tableName, List<ColumnSpec> columns) {
         try {
             if (catalogs.containsKey(tableName)) {
                 throw new IllegalArgumentException("table already exists: " + tableName);
@@ -80,48 +81,64 @@ public final class StorageEngine {
             }
 
             CatalogData catalog = new CatalogData();
+            catalog.version = 0;
+            catalog.maxPartitionNumber = -1;
             catalog.maxRowsPerPartition = defaultMaxRowsPerPartition;
             catalog.columns.addAll(List.copyOf(columns));
 
-            CatalogStore.write(tableDirectory(tableName), catalog);
-            catalogs.put(tableName, catalog);
-            LOGGER.debug("op=createTable table={} columns={}", csvSafe(tableName), columns.size());
+            commit(tableName, catalog);
+            LOGGER.debug("op=createTable table={} columns={} version={}",
+                    csvSafe(tableName), columns.size(), catalog.version);
+            return catalog.version;
         } catch (RuntimeException e) {
             throw failed("createTable", "table=" + tableName, e);
         }
     }
 
-    public void copyFile(String tableName, String csvFilePath) {
+    /** @return the catalog version this copy committed */
+    public int copyFile(String tableName, String csvFilePath) {
         long start = System.currentTimeMillis();
         try {
-            CatalogData catalog = requireCatalog(tableName);
-            if (!catalog.partitions.isEmpty()) {
-                throw new UnsupportedOperationException(
-                        "table " + tableName + " already has data; appending is not supported yet");
-            }
-
-            List<ColumnSpec> columns = catalog.columns;
+            CatalogData current = requireCatalog(tableName);
+            List<ColumnSpec> columns = current.columns;
             List<Object[]> rows = readCsv(csvFilePath, columns);
 
-            int partitionIndex = 0;
-            for (int rowStart = 0; rowStart < rows.size(); rowStart += catalog.maxRowsPerPartition) {
-                int rowEnd = Math.min(rowStart + catalog.maxRowsPerPartition, rows.size());
-                writePartition(tableName, catalog, columns, rows.subList(rowStart, rowEnd), partitionIndex);
+            List<CatalogData.Partition> partitions = new ArrayList<>(current.partitions);
+            int partitionIndex = current.maxPartitionNumber + 1;
+            int partitionsWritten = 0;
+            for (int rowStart = 0; rowStart < rows.size(); rowStart += current.maxRowsPerPartition) {
+                int rowEnd = Math.min(rowStart + current.maxRowsPerPartition, rows.size());
+                partitions.add(writePartition(
+                        tableName, columns, rows.subList(rowStart, rowEnd), partitionIndex));
                 partitionIndex++;
+                partitionsWritten++;
             }
 
-            CatalogStore.write(tableDirectory(tableName), catalog);
+            CatalogData next = new CatalogData();
+            next.version = current.version + 1;
+            next.maxPartitionNumber = partitionIndex - 1;
+            next.maxRowsPerPartition = current.maxRowsPerPartition;
+            next.columns.addAll(columns);
+            next.partitions.addAll(partitions);
+            commit(tableName, next);
 
             long durationMs = System.currentTimeMillis() - start;
-            LOGGER.debug("op=copyFile table={} file={} rows={} partitions={} durationMs={}",
-                    csvSafe(tableName), csvSafe(csvFilePath), rows.size(), partitionIndex, durationMs);
+            LOGGER.debug("op=copyFile table={} file={} rows={} partitions={} version={} durationMs={}",
+                    csvSafe(tableName), csvSafe(csvFilePath), rows.size(), partitionsWritten, next.version, durationMs);
+            return next.version;
         } catch (RuntimeException e) {
             throw failed("copyFile", "table=%s file=%s durationMs=%d"
                     .formatted(tableName, csvFilePath, System.currentTimeMillis() - start), e);
         }
     }
 
-    private void writePartition(String tableName, CatalogData catalog, List<ColumnSpec> columns,
+    /** Disk first, then the map. A failed rename leaves the previous catalog in place. */
+    private void commit(String tableName, CatalogData next) {
+        CatalogStore.write(tableDirectory(tableName), next);
+        catalogs.put(tableName, next);
+    }
+
+    private CatalogData.Partition writePartition(String tableName, List<ColumnSpec> columns,
                                  List<Object[]> partitionRows, int partitionIndex) {
         int columnCount = columns.size();
         List<List<Object>> columnData = new ArrayList<>(columnCount);
@@ -145,7 +162,7 @@ public final class StorageEngine {
             LOGGER.debug("op=copyFile table={} partition={} column={} min={} max={}",
                     csvSafe(tableName), partitionIndex, csvSafe(column.name()), csvSafe(stats.min), csvSafe(stats.max));
         }
-        catalog.partitions.add(new CatalogData.Partition(dataFileName, partitionRows.size(), statsByColumn));
+        return new CatalogData.Partition(dataFileName, partitionRows.size(), statsByColumn);
     }
 
     //method used for the binder. The table's schema, in column order. Throws IllegalArgumentException if the table is unknown.
