@@ -7,10 +7,16 @@ import java.util.Map;
 
 /**
  * The JSON-serializable contents of one table's catalog file: schema, partition size,
- * and the list of partitions with their per-column min/max (catalog-only pruning, per storage-design.md).
+ * version, the highest partition number ever assigned, and the list of partitions with their
+ * per-column min/max (catalog-only pruning, per storage-design.md).
+ * {@code version} is 0 for an empty table from {@code CREATE TABLE}; each committed {@code COPY} writes the next one.
+ * {@code maxPartitionNumber} is -1 until the first partition file is written, and it is not lowered when a
+ * partition drops out of the list, so a later {@code COPY} does not reuse a file name.
  */
 public final class CatalogData {
 
+    public int version;
+    public int maxPartitionNumber = -1;
     public List<ColumnSpec> columns = new ArrayList<>();
     public int maxRowsPerPartition;
     public List<Partition> partitions = new ArrayList<>();
