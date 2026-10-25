@@ -93,14 +93,16 @@ Format follows `storage-design.md`: the question in bold, our answer indented be
 
     Since our engine always overwrites the catalog.json, no previous versions are
     retained. As argued in section (1) we do not need time travel and existing runs
-    will hold their referenced catalog in-memory until done. Thus, no previous versions
+    will hold their catalog version in-memory until done. Thus, no previous versions
     are needed to be retained.
-    The only retention is while the new version are being built but not yet committed.
+    The only retention is while the new version is being built but not yet committed.
     As described in (2) a different reader will also always read either the old
     or new version, there is no accessible intermediary state, due to the ATOMIC rename.
 
     A statement asking for a version that is gone should not happen, but if it does
     it will return a custom error and produce a log line.
+    Partition Files live until the engine is shut-down, ensuring no referenced
+    partitions are removed before references have been retired.
 
     > [!NOTE]
     > I'm unsure if this fully captures "the gist" of it, since it is not one of
@@ -118,6 +120,17 @@ Format follows `storage-design.md`: the question in bold, our answer indented be
 
     *Where we stand today:* `Pruner.canPrune` is public and used by `Planner`.
     -->
+
+    Pruning already lives as its own class within the `storage` module.
+    The branching (predicate vs. no-predicate) and looping over partitions could
+    be shared, as this should remain the same. The main difference is the execution
+    tree created by the `Planner` class in the `exec` module vs. what is the pattern
+    for a delete statement. -> let's extend the Planner with an overloaded `plan`
+    function for `DeleteStatement` and consider moving the iteration over partitions
+    upstream to the `Pruner` class.
+
+    For non-pruned partitions which contains matches we carry the original over,
+    i.e. we leave it untouched and retain the reference.
 
 6. **New version:** 
    <!-- does a `DELETE` that matches nothing still create a new version?
