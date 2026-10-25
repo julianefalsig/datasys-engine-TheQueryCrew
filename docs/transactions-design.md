@@ -135,6 +135,7 @@ Format follows `storage-design.md`: the question in bold, our answer indented be
 6. **New version:** 
    <!-- does a `DELETE` that matches nothing still create a new version?
    --> 
+   A DELETE that matches nothing produces a log-line but no new table version.
 
 7. **Partition placement:** 
    
@@ -145,6 +146,14 @@ Format follows `storage-design.md`: the question in bold, our answer indented be
     restarts at 0 on every `copyFile`. Whatever we choose here, the naming has to become unique
     per table before repeated `COPY` is allowed, or the second `COPY` overwrites the first one's
     files.-->
+
+    Since each partition in our system is its own file, new files are simply created
+    at every new partition.
+    We will ensure that indexes are increased appropriately to allow multiple COPY
+    statements without marking the first one as 0 in each COPY statement execution.
+    We will consider whether we should hex-encode our "partition-number" to have
+    fixed-length file naming standard, since the partition number is never actively
+    used except to ensure uniqueness of filenames.
 
 ---
 
