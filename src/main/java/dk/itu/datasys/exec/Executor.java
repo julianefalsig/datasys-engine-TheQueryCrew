@@ -84,16 +84,16 @@ public final class Executor {
         return switch (statement) {
             case CreateTableStatement create -> {
                 long executeStarted = System.nanoTime();
-                engine.createTable(create.tableName(), create.columns());
-                LOGGER.debug("create_complete parseMs={} bindMs={} executeMs={} durationMs={}",
-                        parseMs, bindMs, durationMs(executeStarted), durationMs(startedNanos));
+                int version = engine.createTable(create.tableName(), create.columns());
+                LOGGER.debug("create_complete parseMs={} bindMs={} executeMs={} durationMs={} version={}",
+                        parseMs, bindMs, durationMs(executeStarted), durationMs(startedNanos), version);
                 yield null;
             }
             case CopyStatement copy -> {
                 long executeStarted = System.nanoTime();
-                engine.copyFile(copy.tableName(), copy.csvFilePath());
-                LOGGER.debug("copy_complete parseMs={} bindMs={} executeMs={} durationMs={}",
-                        parseMs, bindMs, durationMs(executeStarted), durationMs(startedNanos));
+                int version = engine.copyFile(copy.tableName(), copy.csvFilePath());
+                LOGGER.debug("copy_complete parseMs={} bindMs={} executeMs={} durationMs={} version={}",
+                        parseMs, bindMs, durationMs(executeStarted), durationMs(startedNanos), version);
                 yield null;
             }
             case SelectStatement select -> executeSelect(select, parseMs, bindMs, startedNanos);
@@ -107,8 +107,9 @@ public final class Executor {
         long executeStarted = System.nanoTime();
         List<Object[]> rows = plan.drain();
         LOGGER.debug(
-                "select_complete rowsOut={} parseMs={} bindMs={} planMs={} executeMs={} durationMs={}",
-                rows.size(), parseMs, bindMs, planMs, durationMs(executeStarted), durationMs(startedNanos));
+                "select_complete rowsOut={} parseMs={} bindMs={} planMs={} executeMs={} durationMs={} version={}",
+                rows.size(), parseMs, bindMs, planMs, durationMs(executeStarted), durationMs(startedNanos),
+                plan.version());
         return rows;
     }
 
