@@ -71,12 +71,13 @@ class StorageEngineLoggingIT {
         engine.copyFile("trips", copyResource(dataDir, "trips.csv").toString());
         new Executor(engine).execute("SELECT * FROM trips WHERE distance > 100;");
 
-        assertEquals(1, countMessagesContaining("op=createTable table=trips columns=3"));
+        assertEquals(1, countMessagesContaining("op=createTable table=trips columns=3 version=0"));
         assertEquals(1, countMessagesContaining("op=copyFile table=trips file="));
+        assertEquals(1, countMessagesContaining("partitions=4 version=1"));
         assertEquals(4, countMessagesContaining("op=select table=trips column=distance comparison=GREATER_THAN "
                 + "const=100"));
         assertEquals(1, countMessagesContaining(
-                "op=select table=trips partitionsTotal=4 partitionsRead=4 partitionsPruned=0"));
+                "op=select table=trips partitionsTotal=4 partitionsRead=4 partitionsPruned=0 version=1"));
     }
 
     @Test

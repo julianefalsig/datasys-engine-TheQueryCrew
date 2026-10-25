@@ -212,6 +212,37 @@ class StorageEngineIT {
     }
 
     @Test
+    void copyAfterAGapDoesNotOverwriteExistingPartitionFiles(@TempDir Path dataDir) throws IOException {
+        Path csv = copyResource(dataDir, "trips.csv");
+        StorageEngine engine = new StorageEngine(dataDir, 2);
+        engine.createTable("trips", TRIPS_SCHEMA);
+        engine.copyFile("trips", csv.toString());
+
+        // Drop the middle partitions from the catalog and leave their files on disk, as a delete would.
+        // The list length is then 2, which is also the index of a file that is still there.
+        CatalogData gapped = CatalogStore.read(engine.tableDirectory("trips"));
+        CatalogData.Partition first = gapped.partitions.get(0);
+        CatalogData.Partition last = gapped.partitions.get(3);
+        gapped.partitions.clear();
+        gapped.partitions.add(first);
+        gapped.partitions.add(last);
+        CatalogStore.write(engine.tableDirectory("trips"), gapped);
+
+        Path partition2 = engine.tableDirectory("trips").resolve("partition-2.bin");
+        Path partition3 = engine.tableDirectory("trips").resolve("partition-3.bin");
+        byte[] partition2Before = Files.readAllBytes(partition2);
+        byte[] partition3Before = Files.readAllBytes(partition3);
+
+        StorageEngine restarted = new StorageEngine(dataDir, 2);
+        restarted.copyFile("trips", csv.toString());
+
+        assertArrayEquals(partition2Before, Files.readAllBytes(partition2));
+        assertArrayEquals(partition3Before, Files.readAllBytes(partition3));
+        assertEquals(7, restarted.catalog("trips").maxPartitionNumber);
+        assertEquals("partition-4.bin", restarted.catalog("trips").partitions.get(2).dataFile());
+    }
+
+    @Test
     void returnsTheColumnsInSchemaOrder(@TempDir Path dataDir) {
         StorageEngine engine = new StorageEngine(dataDir);
         engine.createTable("trips", TRIPS_SCHEMA);
