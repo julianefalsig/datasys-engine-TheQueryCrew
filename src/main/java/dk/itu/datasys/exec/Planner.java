@@ -34,22 +34,24 @@ public final class Planner {
     public Plan plan(SelectStatement select) {
         String tableName = select.tableName();
         CatalogData catalog = engine.catalog(tableName);
+        int version = catalog.version;
+        List<CatalogData.Partition> partitions = List.copyOf(catalog.partitions);
         List<ColumnSpec> columns = List.copyOf(catalog.columns);
         Path tableDir = engine.tableDirectory(tableName);
 
         // No where clause -> read all partitions.
         // Operator expects a list of Paths to the partition files, we build it here.
         if (select.where().isEmpty()) {
-            List<Path> allPartitions = new ArrayList<>(catalog.partitions.size());
-            for (int p = 0; p < catalog.partitions.size(); p++) {
-                CatalogData.Partition partition = catalog.partitions.get(p);
+            List<Path> allPartitions = new ArrayList<>(partitions.size());
+            for (int p = 0; p < partitions.size(); p++) {
+                CatalogData.Partition partition = partitions.get(p);
                 allPartitions.add(tableDir.resolve(partition.dataFile()));
                 LOGGER.debug("partition={} decision=READ reason=noPredicate", p);
             }
-            int total = catalog.partitions.size();
+            int total = partitions.size();
             ScanStats stats = new ScanStats(total, total, 0); // all partitions read
-            logScanStats(tableName, stats);
-            return new Plan(new ScanOperator(tableName, columns, allPartitions), stats);
+            logScanStats(tableName, stats, version);
+            return new Plan(new ScanOperator(tableName, columns, allPartitions), stats, version);
         }
 
         // There is a where clause -> we prune partitions
@@ -61,12 +63,12 @@ public final class Planner {
         Object constant = predicate.constant();
 
         List<Path> surviving = new ArrayList<>();
-        int partitionsTotal = catalog.partitions.size();
+        int partitionsTotal = partitions.size();
         int partitionsPruned = 0;
 
         for (int p = 0; p < partitionsTotal; p++) {
             // Prune if the partition is outside the range of the predicate.
-            CatalogData.Partition entry = catalog.partitions.get(p);
+            CatalogData.Partition entry = partitions.get(p);
             CatalogData.Range range = entry.stats().get(predicate.columnName());
             Object min = range.min();
             Object max = range.max();
@@ -85,18 +87,18 @@ public final class Planner {
 
         int partitionsKept = surviving.size();
         ScanStats stats = new ScanStats(partitionsTotal, partitionsKept, partitionsPruned);
-        logScanStats(tableName, stats);
+        logScanStats(tableName, stats, version);
 
         // Build the plan from the leaf -> root.
         Operator scan = new ScanOperator(tableName, columns, surviving);
         RowPredicate rowPredicate = new RowPredicate(
                 columnIndex, comparison, constant, predicateColumn.type());
-        return new Plan(new FilterOperator(scan, rowPredicate), stats);
+        return new Plan(new FilterOperator(scan, rowPredicate), stats, version);
     }
 
-    private static void logScanStats(String tableName, ScanStats stats) {
-        LOGGER.debug("op=select table={} partitionsTotal={} partitionsRead={} partitionsPruned={}",
-                csvSafe(tableName), stats.partitionsTotal(), stats.partitionsRead(), stats.partitionsPruned());
+    private static void logScanStats(String tableName, ScanStats stats, int version) {
+        LOGGER.debug("op=select table={} partitionsTotal={} partitionsRead={} partitionsPruned={} version={}",
+                csvSafe(tableName), stats.partitionsTotal(), stats.partitionsRead(), stats.partitionsPruned(), version);
     }
 
     private static int columnIndex(List<ColumnSpec> columns, String columnName, String tableName) {

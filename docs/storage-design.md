@@ -9,6 +9,8 @@
     - schema as a list of column specifications (name + type)
     - list of partition data files and their statistics
     - configurable parameters as maxRowsPerPartition
+    - a version number: 0 after CREATE TABLE, incremented by each committed COPY
+    - `maxPartitionNumber`: the highest `partition-<n>.bin` index ever assigned, -1 when none have been. It stays put when a partition leaves the list, so the next COPY does not reuse a file name
 
 3.  **Where the min/max summaries live.** The requirement is only that they exist per column per partition and that `select` can consult them without reading the column data they describe. Three designs are defensible. A **footer** after the data is Parquet's choice and is natural for a single-pass writer. A **header** at the front is convenient for the reader, but the writer must buffer the partition or seek back to fill it in. **In the catalog only** means that pruning needs no data-file I/O at all, as in Snowflake and Iceberg, but a data file is then no longer self-describing. Pick one and justify it.
 

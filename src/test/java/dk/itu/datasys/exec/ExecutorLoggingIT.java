@@ -69,8 +69,10 @@ class ExecutorLoggingIT {
 
         assertEquals("1", numberOfLineContaining("op=createTable"));
         assertHasParseAndExecute("create_complete");
+        assertTrue(onlyLineContaining("create_complete")[6].contains("version=0"));
         assertEquals("2", numberOfLineContaining("op=copyFile table=trips file="));
         assertHasParseAndExecute("copy_complete");
+        assertTrue(onlyLineContaining("copy_complete")[6].contains("version=1"));
 
         // The third statement is a whole pipeline: planner and filter both answer to its number.
         assertEquals("3", numberOfLineContaining("const=Odense"));
@@ -87,6 +89,7 @@ class ExecutorLoggingIT {
             assertTrue(message.contains("planMs="), message);
             assertTrue(message.contains("executeMs="), message);
             assertTrue(message.contains("durationMs="), message);
+            assertTrue(message.contains("version=1"), message);
         }
 
         // Counted from 1, one number per statement, in order, with no gaps and no repeats.
