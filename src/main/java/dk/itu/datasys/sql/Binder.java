@@ -4,6 +4,7 @@ import dk.itu.datasys.storage.ColumnSpec;
 import dk.itu.datasys.storage.StorageEngine;
 
 import java.util.List;
+import java.util.Optional;
 
 //Checks a parsed statement against the catalog
 
@@ -19,8 +20,9 @@ public final class Binder {
     public void bind(Statement statement) {
         switch (statement) {
             case CopyStatement copy -> bindCopy(copy);
-            case SelectStatement select -> bindSelect(select);
+            case SelectStatement select -> bindWhere(select.tableName(), select.where());
             case CreateTableStatement create -> bindCreateTable(create);
+            case DeleteStatement delete -> bindWhere(delete.tableName(), delete.where());
         }
     }
     // The lookup is the check: it throws if the table is unknown. The CSV file is execution's concern.
@@ -28,18 +30,19 @@ public final class Binder {
         engine.schema(copy.tableName());
     }
 
-    private void bindSelect(SelectStatement select) {
-        List<ColumnSpec> schema = engine.schema(select.tableName());
+    // SELECT and DELETE check the same things: the table exists, and a WHERE fits its schema.
+    private void bindWhere(String tableName, Optional<Predicate> where) {
+        List<ColumnSpec> schema = engine.schema(tableName);
         // Without a WHERE there is nothing to check beyond the table itself.
-        if (select.where().isEmpty()) {
+        if (where.isEmpty()) {
             return;
         }
-        Predicate predicate = select.where().get();
+        Predicate predicate = where.get();
         ColumnSpec column = schema.stream()
                 .filter(candidate -> candidate.name().equals(predicate.columnName()))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "unknown column: " + predicate.columnName() + " on table " + select.tableName()));
+                        "unknown column: " + predicate.columnName() + " on table " + tableName));
         if (!column.type().accepts(predicate.constant())) {
             throw new IllegalArgumentException(
                     "constant type %s does not match column %s of type %s"

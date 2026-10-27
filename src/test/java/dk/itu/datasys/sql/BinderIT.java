@@ -137,4 +137,50 @@ class BinderIT {
                 () -> binder.bind(new SelectStatement("trips",
                         Optional.of(new Predicate("distance", Comparison.EQUALS, "x")))));
     }
+
+    // No WHERE deletes every row; the table is the only thing there is to check.
+    @Test
+    void deleteWithoutWhereBinds(@TempDir Path dataDir) {
+        Binder binder = binderWithTrips(dataDir);
+
+        assertDoesNotThrow(() -> binder.bind(new DeleteStatement("trips", Optional.empty())));
+    }
+
+    // city is a STRING column and 'Copenhagen' is a String, so the predicate lines up.
+    @Test
+    void deleteWithAMatchingPredicateBinds(@TempDir Path dataDir) {
+        Binder binder = binderWithTrips(dataDir);
+
+        assertDoesNotThrow(() -> binder.bind(new DeleteStatement("trips",
+                Optional.of(new Predicate("city", Comparison.EQUALS, "Copenhagen")))));
+    }
+
+    // No such table, exactly as for SELECT.
+    @Test
+    void deleteFromAnUnknownTableThrows(@TempDir Path dataDir) {
+        Binder binder = binderWithTrips(dataDir);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> binder.bind(new DeleteStatement("missing", Optional.empty())));
+    }
+
+    // The table exists but has no such column, so no row could ever be matched.
+    @Test
+    void deleteOnAnUnknownColumnThrows(@TempDir Path dataDir) {
+        Binder binder = binderWithTrips(dataDir);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> binder.bind(new DeleteStatement("trips",
+                        Optional.of(new Predicate("missing", Comparison.EQUALS, "Copenhagen")))));
+    }
+
+    // price = 'x' compares a DOUBLE column against a String.
+    @Test
+    void deleteWithATypeMismatchedConstantThrows(@TempDir Path dataDir) {
+        Binder binder = binderWithTrips(dataDir);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> binder.bind(new DeleteStatement("trips",
+                        Optional.of(new Predicate("price", Comparison.EQUALS, "x")))));
+    }
 }
