@@ -2,10 +2,32 @@ package dk.itu.datasys.storage;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PrunerTest {
+
+    // One answer per partition, in list order, and true exactly where canPrune says false.
+    @Test
+    void mayMatchMarksThePartitionsWhoseRangeAllowsAMatch() {
+        List<CatalogData.Partition> partitions = List.of(
+                distanceRange(12L, 31L),
+                distanceRange(88L, 95L),
+                distanceRange(140L, 187L),
+                distanceRange(210L, 299L));
+
+        boolean[] mayMatch = Pruner.mayMatch(partitions, "distance", Comparison.GREATER_THAN, 150L, ColumnType.LONG);
+
+        assertArrayEquals(new boolean[] {false, false, true, true}, mayMatch);
+    }
+
+    private static CatalogData.Partition distanceRange(long min, long max) {
+        return new CatalogData.Partition("unused.bin", 2, Map.of("distance", new CatalogData.Range(min, max)));
+    }
 
     @Test
     void equalsPrunesLongOutsideRange() {

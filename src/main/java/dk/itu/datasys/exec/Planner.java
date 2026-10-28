@@ -66,17 +66,17 @@ public final class Planner {
         int partitionsTotal = partitions.size();
         int partitionsPruned = 0;
 
+        // Prune if the partition is outside the range of the predicate. DELETE decides from the same call.
+        boolean[] mayMatch = Pruner.mayMatch(
+                partitions, predicate.columnName(), comparison, constant, predicateColumn.type());
+
         for (int p = 0; p < partitionsTotal; p++) {
-            // Prune if the partition is outside the range of the predicate.
             CatalogData.Partition entry = partitions.get(p);
             CatalogData.Range range = entry.stats().get(predicate.columnName());
-            Object min = range.min();
-            Object max = range.max();
-
-            boolean prune = Pruner.canPrune(comparison, constant, min, max, predicateColumn.type());
+            boolean prune = !mayMatch[p];
             LOGGER.debug("op=select table={} column={} comparison={} const={} partition={} min={} max={} decision={}",
                     csvSafe(tableName), csvSafe(predicate.columnName()), comparison, csvSafe(constant), p,
-                    csvSafe(min), csvSafe(max), prune ? "PRUNED" : "READ");
+                    csvSafe(range.min()), csvSafe(range.max()), prune ? "PRUNED" : "READ");
 
             if (prune) {
                 partitionsPruned++;

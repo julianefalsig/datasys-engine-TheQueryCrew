@@ -1,6 +1,7 @@
 package dk.itu.datasys.storage;
 
 import java.util.Comparator;
+import java.util.List;
 
 /** Decides, from a partition's [min, max] range alone, whether it can contain a match for a predicate. */
 public final class Pruner {
@@ -16,5 +17,19 @@ public final class Pruner {
             case LESS_THAN -> cmp.compare(min, constant) >= 0;
             case GREATER_THAN -> cmp.compare(max, constant) <= 0;
         };
+    }
+
+    /**
+     * For each partition, in list order, whether its catalog min/max on {@code columnName} allows a
+     * match. The planner reads the partitions marked true, and DELETE rewrites them; both decide here.
+     */
+    public static boolean[] mayMatch(List<CatalogData.Partition> partitions, String columnName,
+                                     Comparison comparison, Object constant, ColumnType type) {
+        boolean[] mayMatch = new boolean[partitions.size()];
+        for (int p = 0; p < partitions.size(); p++) {
+            CatalogData.Range range = partitions.get(p).stats().get(columnName);
+            mayMatch[p] = !canPrune(comparison, constant, range.min(), range.max(), type);
+        }
+        return mayMatch;
     }
 }
