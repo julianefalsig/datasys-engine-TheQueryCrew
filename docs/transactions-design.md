@@ -129,8 +129,21 @@ Format follows `storage-design.md`: the question in bold, our answer indented be
     function for `DeleteStatement` and consider moving the iteration over partitions
     upstream to the `Pruner` class.
 
-    For non-pruned partitions which contains matches we carry the original over,
+    For non-pruned partitions which contains no matches we carry the original over,
     i.e. we leave it untouched and retain the reference.
+
+    > [!NOTE]
+    > This part changed slightly in the code. Instead of extending the `Planner` with an
+    > overloaded `plan` function for `DeleteStatement`, as the decision above says, we moved
+    > the loop over the partitions into `Pruner.mayMatch`. The planner reads the partitions it
+    > marks true, and `DELETE` rewrites them, so both still decide from the same code.
+    > `DELETE` itself runs in `StorageEngine`, next to `COPY`.
+    > Had we followed the original decision, the `Planner` would have had to write partition
+    > files and commit a new catalog version, even though a `Plan` is built to return rows,
+    > and a `DELETE` returns none. Writing to disk would then be split between two classes.
+    > We therefore kept the `Planner` for reading only, and kept everything that writes to
+    > disk and commits in one place.
+
 
 6. **New version:** 
    <!-- does a `DELETE` that matches nothing still create a new version?
