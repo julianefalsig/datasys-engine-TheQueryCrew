@@ -7,6 +7,7 @@ import dk.itu.datasys.sql.CreateTableStatement;
 import dk.itu.datasys.sql.DeleteStatement;
 import dk.itu.datasys.sql.SelectStatement;
 import dk.itu.datasys.sql.Statement;
+import dk.itu.datasys.storage.DeleteResult;
 import dk.itu.datasys.storage.StorageEngine;
 
 import org.slf4j.Logger;
@@ -18,7 +19,7 @@ import java.util.List;
 
 /**
  * Runs SQL statement by statement: parse → bind → plan → execute. Stops at the first error.
- * CREATE TABLE and COPY call the storage API directly; SELECT drains a planned operator tree.
+ * CREATE TABLE, COPY and DELETE call the storage API directly; SELECT drains a planned operator tree.
  */
 public final class Executor {
 
@@ -98,9 +99,18 @@ public final class Executor {
                 yield null;
             }
             case SelectStatement select -> executeSelect(select, parseMs, bindMs, startedNanos);
-            // Copy-on-write execution is exercise 7.4; until then a bound DELETE stops the script.
-            case DeleteStatement delete -> throw new UnsupportedOperationException(
-                    "DELETE is not implemented yet: " + delete.tableName());
+            case DeleteStatement delete -> {
+                long executeStarted = System.nanoTime();
+                DeleteResult result = delete.where()
+                        .map(where -> engine.delete(
+                                delete.tableName(), where.columnName(), where.comparison(), where.constant()))
+                        .orElseGet(() -> engine.deleteAll(delete.tableName()));
+                LOGGER.debug("delete_complete rowsDeleted={} partitionsRewritten={} partitionsCarried={} "
+                                + "parseMs={} bindMs={} executeMs={} durationMs={} version={}",
+                        result.rowsDeleted(), result.partitionsRewritten(), result.partitionsCarried(),
+                        parseMs, bindMs, durationMs(executeStarted), durationMs(startedNanos), result.version());
+                yield null;
+            }
         };
     }
 
