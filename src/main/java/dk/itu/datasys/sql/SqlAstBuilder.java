@@ -58,6 +58,14 @@ public final class SqlAstBuilder extends SqlBaseVisitor<Object> {
     }
 
     @Override
+    public DeleteStatement visitDelete(SqlParser.DeleteContext ctx) {
+        Optional<Predicate> where = ctx.predicate() == null
+                ? Optional.empty()
+                : Optional.of(visitPredicate(ctx.predicate()));
+        return new DeleteStatement(ctx.IDENTIFIER().getText(), where);
+    }
+
+    @Override
     public Predicate visitPredicate(SqlParser.PredicateContext ctx) {
         return new Predicate(
                 ctx.IDENTIFIER().getText(),

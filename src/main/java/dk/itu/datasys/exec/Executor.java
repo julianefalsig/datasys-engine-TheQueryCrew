@@ -4,6 +4,7 @@ import dk.itu.datasys.SqlParser;
 import dk.itu.datasys.sql.Binder;
 import dk.itu.datasys.sql.CopyStatement;
 import dk.itu.datasys.sql.CreateTableStatement;
+import dk.itu.datasys.sql.DeleteStatement;
 import dk.itu.datasys.sql.SelectStatement;
 import dk.itu.datasys.sql.Statement;
 import dk.itu.datasys.storage.StorageEngine;
@@ -97,6 +98,9 @@ public final class Executor {
                 yield null;
             }
             case SelectStatement select -> executeSelect(select, parseMs, bindMs, startedNanos);
+            // Copy-on-write execution is exercise 7.4; until then a bound DELETE stops the script.
+            case DeleteStatement delete -> throw new UnsupportedOperationException(
+                    "DELETE is not implemented yet: " + delete.tableName());
         };
     }
 
@@ -118,6 +122,7 @@ public final class Executor {
             case SelectStatement ignored -> "SELECT";
             case CreateTableStatement ignored -> "CREATE";
             case CopyStatement ignored -> "COPY";
+            case DeleteStatement ignored -> "DELETE";
         };
     }
 

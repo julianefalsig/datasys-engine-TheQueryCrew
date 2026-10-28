@@ -2,6 +2,7 @@ package dk.itu.datasys;
 
 import dk.itu.datasys.sql.CopyStatement;
 import dk.itu.datasys.sql.CreateTableStatement;
+import dk.itu.datasys.sql.DeleteStatement;
 import dk.itu.datasys.sql.Predicate;
 import dk.itu.datasys.sql.SelectStatement;
 import dk.itu.datasys.sql.Statement;
@@ -43,6 +44,13 @@ class SqlParserTest {
         assertEquals(
                 new SelectStatement("trips", Optional.empty()),
                 parseOne("SELECT * FROM trips;"));
+        assertEquals(
+                new DeleteStatement("trips", Optional.of(
+                        new Predicate("city", Comparison.EQUALS, "Copenhagen"))),
+                parseOne("DELETE FROM trips WHERE city = 'Copenhagen';"));
+        assertEquals(
+                new DeleteStatement("trips", Optional.empty()),
+                parseOne("DELETE FROM trips;"));
     }
 
     @Test
@@ -89,7 +97,8 @@ class SqlParserTest {
                 Arguments.of("unbalanced parens", "CREATE TABLE trips (city STRING;", 1, 31),
                 Arguments.of("unknown type name", "CREATE TABLE trips (city TEXT);", 1, 25),
                 Arguments.of("unterminated string", "COPY trips FROM 'trips.csv;", 1, 16),
-                Arguments.of("missing FROM", "SELECT * trips;", 1, 9));
+                Arguments.of("missing FROM", "SELECT * trips;", 1, 9),
+                Arguments.of("DELETE without FROM", "DELETE trips;", 1, 7));
     }
 
     @Test
