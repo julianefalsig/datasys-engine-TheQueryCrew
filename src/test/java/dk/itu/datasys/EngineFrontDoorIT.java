@@ -201,6 +201,33 @@ class EngineFrontDoorIT {
                 () -> "execution continued past the error:\n" + result.stdoutText());
     }
 
+    /**
+     * Exercise 7's end-to-end script: two COPYs load the same eight rows twice, the DELETE removes
+     * every Copenhagen row from both, and the SELECT prints what is left. The DELETE prints nothing.
+     */
+    @Test
+    void aScriptWithTwoCopiesAndADeletePrintsTheRowsThatSurvive() throws IOException, InterruptedException {
+        Path script = writeScript("delete.sql",
+                "COPY trips FROM '%s';".formatted(sqlPath(copyResource("trips.csv"))),
+                "DELETE FROM trips WHERE city = 'Copenhagen';",
+                "SELECT * FROM trips;");
+
+        Result result = runEngine("-f", script.toString());
+
+        assertEquals(0, result.exitCode(), () -> "stderr was:\n" + result.stderrText());
+        assertArrayEquals(csv(
+                "Aarhus,187,301.0",
+                "Odense,95,120.75",
+                "Aalborg,210,340.5",
+                "Roskilde,31,45.0",
+                "Esbjerg,299,450.25",
+                "Aarhus,187,301.0",
+                "Odense,95,120.75",
+                "Aalborg,210,340.5",
+                "Roskilde,31,45.0",
+                "Esbjerg,299,450.25"), result.stdout());
+    }
+
     // ---- Helpers ---------------------------------------------------------------------------
 
     /** A script that always starts from the same table, so each test only writes its own query. */
