@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public final class StorageEngine {
 
@@ -25,6 +26,8 @@ public final class StorageEngine {
     private final Path dataDirectory;
     private final int defaultMaxRowsPerPartition;
     private final Map<String, CatalogData> catalogs = new ConcurrentHashMap<>();
+    private final Map<String, AtomicInteger> nextPartitionNumbers = new ConcurrentHashMap<>();
+    private final Object commitLock = new Object();
 
     public StorageEngine(Path dataDirectory) {
         this(dataDirectory, DEFAULT_MAX_ROWS_PER_PARTITION);
@@ -86,7 +89,8 @@ public final class StorageEngine {
             catalog.maxRowsPerPartition = defaultMaxRowsPerPartition;
             catalog.columns.addAll(List.copyOf(columns));
 
-            commit(tableName, catalog);
+            // Base -1: the table must still not exist when the commit runs.
+            commit(tableName, -1, catalog);
             LOGGER.debug("op=createTable table={} columns={} version={}",
                     csvSafe(tableName), columns.size(), catalog.version);
             return catalog.version;
@@ -104,23 +108,23 @@ public final class StorageEngine {
             List<Object[]> rows = readCsv(csvFilePath, columns);
 
             List<CatalogData.Partition> partitions = new ArrayList<>(current.partitions);
-            int partitionIndex = current.maxPartitionNumber + 1;
+            int maxPartitionNumber = current.maxPartitionNumber;
             int partitionsWritten = 0;
             for (int rowStart = 0; rowStart < rows.size(); rowStart += current.maxRowsPerPartition) {
                 int rowEnd = Math.min(rowStart + current.maxRowsPerPartition, rows.size());
+                maxPartitionNumber = reservePartitionNumber(tableName, current);
                 partitions.add(writePartition(
-                        "copyFile", tableName, columns, rows.subList(rowStart, rowEnd), partitionIndex));
-                partitionIndex++;
+                        "copyFile", tableName, columns, rows.subList(rowStart, rowEnd), maxPartitionNumber));
                 partitionsWritten++;
             }
 
             CatalogData next = new CatalogData();
             next.version = current.version + 1;
-            next.maxPartitionNumber = partitionIndex - 1;
+            next.maxPartitionNumber = maxPartitionNumber;
             next.maxRowsPerPartition = current.maxRowsPerPartition;
             next.columns.addAll(columns);
             next.partitions.addAll(partitions);
-            commit(tableName, next);
+            commit(tableName, current.version, next);
 
             long durationMs = System.currentTimeMillis() - start;
             LOGGER.debug("op=copyFile table={} file={} rows={} partitions={} version={} durationMs={}",
@@ -170,7 +174,7 @@ public final class StorageEngine {
                             predicate.comparison(), predicate.constant(), predicate.columnType());
 
             List<CatalogData.Partition> partitions = new ArrayList<>(current.partitions.size());
-            int partitionIndex = current.maxPartitionNumber + 1;
+            int maxPartitionNumber = current.maxPartitionNumber;
             int rowsDeleted = 0;
             int partitionsRewritten = 0;
             int partitionsCarried = 0;
@@ -214,8 +218,8 @@ public final class StorageEngine {
                 rowsDeleted += deleted;
                 partitionsRewritten++;
                 if (!kept.isEmpty()) {
-                    partitions.add(writePartition("delete", tableName, columns, kept, partitionIndex));
-                    partitionIndex++;
+                    maxPartitionNumber = reservePartitionNumber(tableName, current);
+                    partitions.add(writePartition("delete", tableName, columns, kept, maxPartitionNumber));
                 }
                 LOGGER.debug("op=delete table={} partition={} decision=REWRITE rowsDeleted={} rowsKept={}",
                         csvSafe(tableName), p, deleted, kept.size());
@@ -226,11 +230,11 @@ public final class StorageEngine {
             if (rowsDeleted > 0) {
                 CatalogData next = new CatalogData();
                 next.version = current.version + 1;
-                next.maxPartitionNumber = partitionIndex - 1;
+                next.maxPartitionNumber = maxPartitionNumber;
                 next.maxRowsPerPartition = current.maxRowsPerPartition;
                 next.columns.addAll(columns);
                 next.partitions.addAll(partitions);
-                commit(tableName, next);
+                commit(tableName, current.version, next);
                 version = next.version;
             }
 
@@ -253,10 +257,37 @@ public final class StorageEngine {
         throw new IllegalArgumentException("unknown column: " + columnName + " on table " + tableName);
     }
 
-    /** Disk first, then the map. A failed rename leaves the previous catalog in place. */
-    private void commit(String tableName, CatalogData next) {
-        CatalogStore.write(tableDirectory(tableName), next);
-        catalogs.put(tableName, next);
+    /**
+     * First committer wins. {@code base} is the version the statement started from, or -1 for a table
+     * that does not exist yet. If the committed version has moved since, the statement throws
+     * {@link ConflictException}; the partitions it wrote are never reachable and become orphans.
+     * Validate, save and swap run under one lock, one writer at a time. Disk first, then the map,
+     * so a failed rename leaves the previous catalog in place.
+     */
+    private void commit(String tableName, int base, CatalogData next) {
+        synchronized (commitLock) {
+            CatalogData committed = catalogs.get(tableName);
+            int current = committed == null ? -1 : committed.version;
+            if (current != base) {
+                LOGGER.debug("conflict table={} base={} current={}", csvSafe(tableName), base, current);
+                throw new ConflictException(tableName, base, current);
+            }
+            CatalogStore.write(tableDirectory(tableName), next);
+            catalogs.put(tableName, next);
+        }
+    }
+
+    /**
+     * The next partition file number for {@code tableName}, never handed out twice in this run. Two
+     * writers that start from the same version would otherwise both pick maxPartitionNumber + 1, and
+     * the second would overwrite the first one's file before either commits. Numbers taken by an
+     * aborted statement stay unused; after a restart the count resumes from the committed catalog,
+     * so at worst an orphan file is overwritten, never a referenced one.
+     */
+    private int reservePartitionNumber(String tableName, CatalogData current) {
+        return nextPartitionNumbers
+                .computeIfAbsent(tableName, t -> new AtomicInteger(current.maxPartitionNumber + 1))
+                .getAndIncrement();
     }
 
     private CatalogData.Partition writePartition(String op, String tableName, List<ColumnSpec> columns,
