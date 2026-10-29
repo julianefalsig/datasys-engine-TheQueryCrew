@@ -26,6 +26,8 @@ public final class StorageEngine {
     private final Path dataDirectory;
     private final int defaultMaxRowsPerPartition;
     private final Map<String, CatalogData> catalogs = new ConcurrentHashMap<>();
+    // Each table's next partition number, so two concurrent writers never pick the same file name.
+    // A table's counter is created on first use in reservePartitionNumber, starting from its catalog.
     private final Map<String, AtomicInteger> nextPartitionNumbers = new ConcurrentHashMap<>();
     private final Map<String, Object> commitLocks = new ConcurrentHashMap<>();
 
