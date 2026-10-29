@@ -27,7 +27,7 @@ public final class StorageEngine {
     private final int defaultMaxRowsPerPartition;
     private final Map<String, CatalogData> catalogs = new ConcurrentHashMap<>();
     private final Map<String, AtomicInteger> nextPartitionNumbers = new ConcurrentHashMap<>();
-    private final Object commitLock = new Object();
+    private final Map<String, Object> commitLocks = new ConcurrentHashMap<>();
 
     public StorageEngine(Path dataDirectory) {
         this(dataDirectory, DEFAULT_MAX_ROWS_PER_PARTITION);
@@ -261,11 +261,11 @@ public final class StorageEngine {
      * First committer wins. {@code base} is the version the statement started from, or -1 for a table
      * that does not exist yet. If the committed version has moved since, the statement throws
      * {@link ConflictException}; the partitions it wrote are never reachable and become orphans.
-     * Validate, save and swap run under one lock, one writer at a time. Disk first, then the map,
-     * so a failed rename leaves the previous catalog in place.
+     * Validate, save and swap run under the table's lock, one writer per table at a time. Disk first,
+     * then the map, so a failed rename leaves the previous catalog in place.
      */
     private void commit(String tableName, int base, CatalogData next) {
-        synchronized (commitLock) {
+        synchronized (commitLocks.computeIfAbsent(tableName, t -> new Object())) {
             CatalogData committed = catalogs.get(tableName);
             int current = committed == null ? -1 : committed.version;
             if (current != base) {
