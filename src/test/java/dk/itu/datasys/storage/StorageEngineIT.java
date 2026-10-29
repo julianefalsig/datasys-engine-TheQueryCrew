@@ -175,6 +175,116 @@ class StorageEngineIT {
         assertRows(ALL_TRIPS, query(restarted, "SELECT * FROM trips;"));
     }
 
+    // CREATE, COPY, COPY, DELETE commit versions 0 to 3, and a SELECT after each sees that commit's rows.
+    @Test
+    void createCopyCopyDeleteCommitVersionsZeroToThree(@TempDir Path dataDir) throws IOException {
+        Path csv = copyResource(dataDir, "trips.csv");
+        StorageEngine engine = new StorageEngine(dataDir, 2);
+
+        query(engine, "CREATE TABLE trips (city STRING, distance LONG, price DOUBLE);");
+        assertEquals(0, engine.catalog("trips").version);
+        assertEquals(0, query(engine, "SELECT * FROM trips;").size());
+
+        query(engine, "COPY trips FROM '%s';".formatted(csv));
+        assertEquals(1, engine.catalog("trips").version);
+        assertEquals(8, query(engine, "SELECT * FROM trips;").size());
+
+        query(engine, "COPY trips FROM '%s';".formatted(csv));
+        assertEquals(2, engine.catalog("trips").version);
+        assertEquals(16, query(engine, "SELECT * FROM trips;").size());
+
+        query(engine, "DELETE FROM trips WHERE city = 'Copenhagen';");
+        assertEquals(3, engine.catalog("trips").version);
+        assertRows(new Object[][] {
+                {"Aarhus", 187L, 301.0},
+                {"Odense", 95L, 120.75},
+                {"Aalborg", 210L, 340.5},
+                {"Roskilde", 31L, 45.0},
+                {"Esbjerg", 299L, 450.25},
+                {"Aarhus", 187L, 301.0},
+                {"Odense", 95L, 120.75},
+                {"Aalborg", 210L, 340.5},
+                {"Roskilde", 31L, 45.0},
+                {"Esbjerg", 299L, 450.25}
+        }, query(engine, "SELECT * FROM trips;"));
+    }
+
+    // Sorted on distance, two rows per partition: 12–31, 88–95, 140–187, 210–299. Only the last can
+    // hold distance > 250, so it alone is rewritten; the other three keep their catalog entries.
+    @Test
+    void deleteRewritesExactlyThePartitionsThatCanMatch(@TempDir Path dataDir) throws IOException {
+        StorageEngine engine = engineWithTrips(dataDir, "trips_sorted.csv");
+        List<CatalogData.Partition> before = List.copyOf(engine.catalog("trips").partitions);
+        byte[] lastFileBefore = Files.readAllBytes(engine.tableDirectory("trips").resolve("partition-3.bin"));
+
+        DeleteResult result = engine.delete("trips", "distance", Comparison.GREATER_THAN, 250L);
+
+        assertEquals(new DeleteResult(2, 1, 1, 3), result);
+        List<CatalogData.Partition> after = engine.catalog("trips").partitions;
+        assertEquals(4, after.size());
+        assertEquals(before.subList(0, 3), after.subList(0, 3));
+        assertEquals("partition-4.bin", after.get(3).dataFile());
+        assertEquals(1, after.get(3).rowCount());
+        assertRange(after.get(3), "distance", 210L, 210L);
+        assertEquals(4, engine.catalog("trips").maxPartitionNumber);
+
+        // The original is never modified: the rewrite went to a new file.
+        assertArrayEquals(lastFileBefore,
+                Files.readAllBytes(engine.tableDirectory("trips").resolve("partition-3.bin")));
+        assertRows(new Object[][] {
+                {"Copenhagen", 12L, 23.5},
+                {"Roskilde", 31L, 45.0},
+                {"Copenhagen", 88L, 99.99},
+                {"Odense", 95L, 120.75},
+                {"Copenhagen", 140L, 210.0},
+                {"Aarhus", 187L, 301.0},
+                {"Aalborg", 210L, 340.5}
+        }, query(engine, "SELECT * FROM trips;"));
+    }
+
+    // 'Bornholm' falls inside partition 2's city range (Aarhus–Copenhagen) but is not in it: the
+    // partition is read and carried over, nothing is deleted, and no new version is committed.
+    @Test
+    void aDeleteThatMatchesNothingCommitsNoNewVersion(@TempDir Path dataDir) throws IOException {
+        StorageEngine engine = engineWithTrips(dataDir, "trips_sorted.csv");
+        List<CatalogData.Partition> before = List.copyOf(engine.catalog("trips").partitions);
+
+        DeleteResult result = engine.delete("trips", "city", Comparison.EQUALS, "Bornholm");
+
+        assertEquals(new DeleteResult(1, 0, 0, 4), result);
+        assertEquals(1, engine.catalog("trips").version);
+        assertEquals(before, engine.catalog("trips").partitions);
+    }
+
+    // A partition whose every row matches drops out of the list without a new file being written.
+    @Test
+    void deleteWithoutWhereEmptiesTheTable(@TempDir Path dataDir) throws IOException {
+        StorageEngine engine = engineWithTrips(dataDir, "trips.csv");
+
+        DeleteResult result = engine.deleteAll("trips");
+
+        assertEquals(new DeleteResult(2, 8, 4, 0), result);
+        assertEquals(List.of(), engine.catalog("trips").partitions);
+        assertEquals(3, engine.catalog("trips").maxPartitionNumber);
+        assertEquals(List.of(), query(engine, "SELECT * FROM trips;"));
+    }
+
+    // A fresh engine on the same directory reads the catalog the DELETE committed.
+    @Test
+    void aRestartedEngineSeesThePostDeleteVersion(@TempDir Path dataDir) throws IOException {
+        StorageEngine engine = engineWithTrips(dataDir, "trips.csv");
+        query(engine, "DELETE FROM trips WHERE distance > 100;");
+
+        StorageEngine restarted = new StorageEngine(dataDir);
+        assertEquals(2, restarted.catalog("trips").version);
+        assertRows(new Object[][] {
+                {"Copenhagen", 12L, 23.5},
+                {"Odense", 95L, 120.75},
+                {"Roskilde", 31L, 45.0},
+                {"Copenhagen", 88L, 99.99}
+        }, query(restarted, "SELECT * FROM trips;"));
+    }
+
     private static StorageEngine engineWithTrips(Path dataDir, String sourceCsv) throws IOException {
         StorageEngine engine = new StorageEngine(dataDir, 2);
         engine.createTable("trips", TRIPS_SCHEMA);

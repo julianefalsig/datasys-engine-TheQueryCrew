@@ -109,7 +109,7 @@ public final class StorageEngine {
             for (int rowStart = 0; rowStart < rows.size(); rowStart += current.maxRowsPerPartition) {
                 int rowEnd = Math.min(rowStart + current.maxRowsPerPartition, rows.size());
                 partitions.add(writePartition(
-                        tableName, columns, rows.subList(rowStart, rowEnd), partitionIndex));
+                        "copyFile", tableName, columns, rows.subList(rowStart, rowEnd), partitionIndex));
                 partitionIndex++;
                 partitionsWritten++;
             }
@@ -132,13 +132,134 @@ public final class StorageEngine {
         }
     }
 
+    /** Deletes every row of {@code tableName}: every partition drops out, and no file is written. */
+    public DeleteResult deleteAll(String tableName) {
+        return delete(tableName, null);
+    }
+
+    /** Deletes the rows of {@code tableName} where {@code columnName comparison constant} holds. */
+    public DeleteResult delete(String tableName, String columnName, Comparison comparison, Object constant) {
+        RowPredicate predicate;
+        try {
+            List<ColumnSpec> columns = requireCatalog(tableName).columns;
+            int columnIndex = columnIndex(columns, columnName, tableName);
+            predicate = new RowPredicate(columnIndex, comparison, constant, columns.get(columnIndex).type());
+        } catch (RuntimeException e) {
+            throw failed("delete", "table=" + tableName, e);
+        }
+        return delete(tableName, predicate);
+    }
+
+    /**
+     * Copy-on-write: a partition whose min/max rules out a match, or that turns out to hold none, is
+     * carried over by reference. Any other partition is read, and the rows that survive go into a new
+     * file; the original is never touched. A partition with no surviving rows drops out of the list.
+     * {@code predicate} is null for a DELETE without WHERE, which matches every row.
+     */
+    private DeleteResult delete(String tableName, RowPredicate predicate) {
+        long start = System.currentTimeMillis();
+        try {
+            CatalogData current = requireCatalog(tableName);
+            List<ColumnSpec> columns = current.columns;
+
+            // The rewrite set: the same call the planner prunes with, read the other way round.
+            // Without a WHERE every partition may match.
+            boolean[] mayMatch = predicate == null
+                    ? null
+                    : Pruner.mayMatch(current.partitions, columns.get(predicate.columnIndex()).name(),
+                            predicate.comparison(), predicate.constant(), predicate.columnType());
+
+            List<CatalogData.Partition> partitions = new ArrayList<>(current.partitions.size());
+            int partitionIndex = current.maxPartitionNumber + 1;
+            int rowsDeleted = 0;
+            int partitionsRewritten = 0;
+            int partitionsCarried = 0;
+
+            for (int p = 0; p < current.partitions.size(); p++) {
+                CatalogData.Partition partition = current.partitions.get(p);
+
+                if (mayMatch != null && !mayMatch[p]) {
+                    partitions.add(partition);
+                    partitionsCarried++;
+                    LOGGER.debug("op=delete table={} partition={} decision=CARRY reason=pruned",
+                            csvSafe(tableName), p);
+                    continue;
+                }
+
+                List<List<Object>> data = PartitionFile.readAllColumns(
+                        tableDirectory(tableName).resolve(partition.dataFile()), columns);
+                List<Object[]> kept = new ArrayList<>();
+                for (int r = 0; r < partition.rowCount(); r++) {
+                    Object[] row = new Object[columns.size()];
+                    for (int c = 0; c < columns.size(); c++) {
+                        row[c] = data.get(c).get(r);
+                    }
+                    // The same row test the filter operator applies to a SELECT.
+                    boolean matches = predicate == null || predicate.test(row);
+                    if (!matches) {
+                        kept.add(row);
+                    }
+                }
+
+                int deleted = partition.rowCount() - kept.size();
+                if (deleted == 0) {
+                    // It may have contained a match, but did not: the original is still exactly right.
+                    partitions.add(partition);
+                    partitionsCarried++;
+                    LOGGER.debug("op=delete table={} partition={} decision=CARRY reason=noMatch",
+                            csvSafe(tableName), p);
+                    continue;
+                }
+
+                rowsDeleted += deleted;
+                partitionsRewritten++;
+                if (!kept.isEmpty()) {
+                    partitions.add(writePartition("delete", tableName, columns, kept, partitionIndex));
+                    partitionIndex++;
+                }
+                LOGGER.debug("op=delete table={} partition={} decision=REWRITE rowsDeleted={} rowsKept={}",
+                        csvSafe(tableName), p, deleted, kept.size());
+            }
+
+            // Commit only if rows were deleted. If nothing matched, no file was written and the version stays.
+            int version = current.version;
+            if (rowsDeleted > 0) {
+                CatalogData next = new CatalogData();
+                next.version = current.version + 1;
+                next.maxPartitionNumber = partitionIndex - 1;
+                next.maxRowsPerPartition = current.maxRowsPerPartition;
+                next.columns.addAll(columns);
+                next.partitions.addAll(partitions);
+                commit(tableName, next);
+                version = next.version;
+            }
+
+            long durationMs = System.currentTimeMillis() - start;
+            LOGGER.debug("op=delete table={} rowsDeleted={} partitionsRewritten={} partitionsCarried={} version={} durationMs={}",
+                    csvSafe(tableName), rowsDeleted, partitionsRewritten, partitionsCarried, version, durationMs);
+            return new DeleteResult(version, rowsDeleted, partitionsRewritten, partitionsCarried);
+        } catch (RuntimeException e) {
+            throw failed("delete", "table=%s durationMs=%d"
+                    .formatted(tableName, System.currentTimeMillis() - start), e);
+        }
+    }
+
+    private static int columnIndex(List<ColumnSpec> columns, String columnName, String tableName) {
+        for (int i = 0; i < columns.size(); i++) {
+            if (columns.get(i).name().equals(columnName)) {
+                return i;
+            }
+        }
+        throw new IllegalArgumentException("unknown column: " + columnName + " on table " + tableName);
+    }
+
     /** Disk first, then the map. A failed rename leaves the previous catalog in place. */
     private void commit(String tableName, CatalogData next) {
         CatalogStore.write(tableDirectory(tableName), next);
         catalogs.put(tableName, next);
     }
 
-    private CatalogData.Partition writePartition(String tableName, List<ColumnSpec> columns,
+    private CatalogData.Partition writePartition(String op, String tableName, List<ColumnSpec> columns,
                                  List<Object[]> partitionRows, int partitionIndex) {
         int columnCount = columns.size();
         List<List<Object>> columnData = new ArrayList<>(columnCount);
@@ -159,8 +280,8 @@ public final class StorageEngine {
             ColumnSpec column = columns.get(c);
             ColumnStats stats = ColumnStats.of(columnData.get(c), column.type());
             statsByColumn.put(column.name(), new CatalogData.Range(stats.min, stats.max));
-            LOGGER.debug("op=copyFile table={} partition={} column={} min={} max={}",
-                    csvSafe(tableName), partitionIndex, csvSafe(column.name()), csvSafe(stats.min), csvSafe(stats.max));
+            LOGGER.debug("op={} table={} partition={} column={} min={} max={}",
+                    op, csvSafe(tableName), partitionIndex, csvSafe(column.name()), csvSafe(stats.min), csvSafe(stats.max));
         }
         return new CatalogData.Partition(dataFileName, partitionRows.size(), statsByColumn);
     }
