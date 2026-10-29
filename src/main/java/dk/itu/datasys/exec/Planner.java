@@ -6,6 +6,7 @@ import dk.itu.datasys.storage.CatalogData;
 import dk.itu.datasys.storage.ColumnSpec;
 import dk.itu.datasys.storage.Comparison;
 import dk.itu.datasys.storage.Pruner;
+import dk.itu.datasys.storage.RowPredicate;
 import dk.itu.datasys.storage.ScanStats;
 import dk.itu.datasys.storage.StorageEngine;
 

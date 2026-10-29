@@ -1,5 +1,7 @@
 package dk.itu.datasys.exec;
 
+import dk.itu.datasys.storage.RowPredicate;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

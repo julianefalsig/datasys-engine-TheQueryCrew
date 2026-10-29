@@ -139,32 +139,35 @@ public final class StorageEngine {
 
     /** Deletes the rows of {@code tableName} where {@code columnName comparison constant} holds. */
     public DeleteResult delete(String tableName, String columnName, Comparison comparison, Object constant) {
-        return delete(tableName, new RowMatch(columnName, comparison, constant));
-    }
-
-    /** One DELETE's WHERE, as storage sees it. */
-    private record RowMatch(String columnName, Comparison comparison, Object constant) {
+        RowPredicate predicate;
+        try {
+            List<ColumnSpec> columns = requireCatalog(tableName).columns;
+            int columnIndex = columnIndex(columns, columnName, tableName);
+            predicate = new RowPredicate(columnIndex, comparison, constant, columns.get(columnIndex).type());
+        } catch (RuntimeException e) {
+            throw failed("delete", "table=" + tableName, e);
+        }
+        return delete(tableName, predicate);
     }
 
     /**
      * Copy-on-write: a partition whose min/max rules out a match, or that turns out to hold none, is
      * carried over by reference. Any other partition is read, and the rows that survive go into a new
      * file; the original is never touched. A partition with no surviving rows drops out of the list.
-     * {@code match} is null for a DELETE without WHERE, which matches every row.
+     * {@code predicate} is null for a DELETE without WHERE, which matches every row.
      */
-    private DeleteResult delete(String tableName, RowMatch match) {
+    private DeleteResult delete(String tableName, RowPredicate predicate) {
         long start = System.currentTimeMillis();
         try {
             CatalogData current = requireCatalog(tableName);
             List<ColumnSpec> columns = current.columns;
-            int columnIndex = match == null ? -1 : columnIndex(columns, match.columnName(), tableName);
-            ColumnType matchType = match == null ? null : columns.get(columnIndex).type();
 
             // The rewrite set: the same call the planner prunes with, read the other way round.
             // Without a WHERE every partition may match.
-            boolean[] mayMatch = match == null
+            boolean[] mayMatch = predicate == null
                     ? null
-                    : Pruner.mayMatch(current.partitions, match.columnName(), match.comparison(), match.constant(), matchType);
+                    : Pruner.mayMatch(current.partitions, columns.get(predicate.columnIndex()).name(),
+                            predicate.comparison(), predicate.constant(), predicate.columnType());
 
             List<CatalogData.Partition> partitions = new ArrayList<>(current.partitions.size());
             int partitionIndex = current.maxPartitionNumber + 1;
@@ -191,8 +194,8 @@ public final class StorageEngine {
                     for (int c = 0; c < columns.size(); c++) {
                         row[c] = data.get(c).get(r);
                     }
-                    boolean matches = match == null
-                            || match.comparison().matches(row[columnIndex], match.constant(), matchType);
+                    // The same row test the filter operator applies to a SELECT.
+                    boolean matches = predicate == null || predicate.test(row);
                     if (!matches) {
                         kept.add(row);
                     }
@@ -218,7 +221,7 @@ public final class StorageEngine {
                         csvSafe(tableName), p, deleted, kept.size());
             }
 
-            // Nothing matched: no file was written, so there is nothing to commit.
+            // Commit only if rows were deleted. If nothing matched, no file was written and the version stays.
             int version = current.version;
             if (rowsDeleted > 0) {
                 CatalogData next = new CatalogData();

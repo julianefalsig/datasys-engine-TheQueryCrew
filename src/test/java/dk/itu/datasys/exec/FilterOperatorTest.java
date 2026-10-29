@@ -2,6 +2,7 @@ package dk.itu.datasys.exec;
 
 import dk.itu.datasys.storage.ColumnType;
 import dk.itu.datasys.storage.Comparison;
+import dk.itu.datasys.storage.RowPredicate;
 
 import org.junit.jupiter.api.Test;
 
