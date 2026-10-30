@@ -31,6 +31,9 @@ public final class StorageEngine {
     private final Map<String, AtomicInteger> nextPartitionNumbers = new ConcurrentHashMap<>();
     private final Map<String, Object> commitLocks = new ConcurrentHashMap<>();
 
+    /** Runs before a commit's validation. Production never touches it; a test parks a writer here. */
+    Runnable beforeCommit = () -> { };
+
     public StorageEngine(Path dataDirectory) {
         this(dataDirectory, DEFAULT_MAX_ROWS_PER_PARTITION);
     }
@@ -267,6 +270,8 @@ public final class StorageEngine {
      * then the map, so a failed rename leaves the previous catalog in place.
      */
     private void commit(String tableName, int base, CatalogData next) {
+        // Outside the lock, so a test can hold one writer here while another writer commits.
+        beforeCommit.run();
         synchronized (commitLocks.computeIfAbsent(tableName, t -> new Object())) {
             CatalogData committed = catalogs.get(tableName);
             int current = committed == null ? -1 : committed.version;
