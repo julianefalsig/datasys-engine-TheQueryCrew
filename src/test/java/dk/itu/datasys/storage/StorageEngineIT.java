@@ -18,6 +18,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -322,14 +323,13 @@ class StorageEngineIT {
     }
 
     @Test
-    void copyAfterAGapDoesNotOverwriteExistingPartitionFiles(@TempDir Path dataDir) throws IOException {
+    void restartRemovesUnreferencedPartitionsAndCopyDoesNotReuseTheirNumbers(@TempDir Path dataDir) throws IOException {
         Path csv = copyResource(dataDir, "trips.csv");
         StorageEngine engine = new StorageEngine(dataDir, 2);
         engine.createTable("trips", TRIPS_SCHEMA);
         engine.copyFile("trips", csv.toString());
 
-        // Drop the middle partitions from the catalog and leave their files on disk, as a delete would.
-        // The list length is then 2, which is also the index of a file that is still there.
+        // Drop the middle partitions from the catalog and leave their files on disk.
         CatalogData gapped = CatalogStore.read(engine.tableDirectory("trips"));
         CatalogData.Partition first = gapped.partitions.get(0);
         CatalogData.Partition last = gapped.partitions.get(3);
@@ -338,15 +338,19 @@ class StorageEngineIT {
         gapped.partitions.add(last);
         CatalogStore.write(engine.tableDirectory("trips"), gapped);
 
-        Path partition2 = engine.tableDirectory("trips").resolve("partition-2.bin");
-        Path partition3 = engine.tableDirectory("trips").resolve("partition-3.bin");
-        byte[] partition2Before = Files.readAllBytes(partition2);
+        Path tableDir = engine.tableDirectory("trips");
+        Path partition2 = tableDir.resolve("partition-2.bin");
+        Path partition3 = tableDir.resolve("partition-3.bin");
         byte[] partition3Before = Files.readAllBytes(partition3);
 
         StorageEngine restarted = new StorageEngine(dataDir, 2);
+        assertFalse(Files.exists(tableDir.resolve("partition-1.bin")));
+        assertFalse(Files.exists(partition2));
+        assertTrue(Files.exists(partition3));
+
         restarted.copyFile("trips", csv.toString());
 
-        assertArrayEquals(partition2Before, Files.readAllBytes(partition2));
+        assertFalse(Files.exists(partition2));
         assertArrayEquals(partition3Before, Files.readAllBytes(partition3));
         assertEquals(7, restarted.catalog("trips").maxPartitionNumber);
         assertEquals("partition-4.bin", restarted.catalog("trips").partitions.get(2).dataFile());
