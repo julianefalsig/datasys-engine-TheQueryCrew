@@ -58,10 +58,9 @@ public final class Engine {
         MDC.put("sessionId", UUID.randomUUID().toString());
         MDC.put("statementNumber", "0");
         LOGGER.debug("engine started");
-        try {
-            StorageEngine engine = maxRows == null
-                    ? new StorageEngine(dataDir)
-                    : new StorageEngine(dataDir, maxRows);
+        try (StorageEngine engine = maxRows == null
+                ? new StorageEngine(dataDir)
+                : new StorageEngine(dataDir, maxRows)) {
             Executor executor = new Executor(engine);
             writeCsv(executor.execute(sql), out);
             return 0;
