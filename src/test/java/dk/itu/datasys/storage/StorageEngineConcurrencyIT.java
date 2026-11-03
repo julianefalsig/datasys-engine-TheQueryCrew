@@ -117,7 +117,7 @@ class StorageEngineConcurrencyIT {
                 {"Odense", 95L, 120.75},
                 {"Esbjerg", 299L, 450.25}
         }, query(engine, "SELECT * FROM trips;"));
-        assertLogContains("rebase table=trips base=1 current=2 version=3"
+        assertLogContains("op=rebase table=trips base=1 current=2 version=3"
                 + " dropped=partition-0.bin;partition-1.bin;partition-3.bin"
                 + " appended=partition-4.bin;partition-5.bin;partition-6.bin");
     }
