@@ -14,6 +14,7 @@
         <log4j.version>2.26.1</log4j.version>
         <jackson.version>2.18.2</jackson.version>
         <antlr.version>4.13.2</antlr.version>
+        <exec.mainClass>dk.itu.datasys.Engine</exec.mainClass>
     </properties>
 
     <dependencies>
@@ -114,7 +115,7 @@
                 <artifactId>exec-maven-plugin</artifactId>
                 <version>3.6.3</version>
                 <configuration>
-                    <mainClass>dk.itu.datasys.Engine</mainClass>
+                    <mainClass>${exec.mainClass}</mainClass>
                 </configuration>
             </plugin>
 
