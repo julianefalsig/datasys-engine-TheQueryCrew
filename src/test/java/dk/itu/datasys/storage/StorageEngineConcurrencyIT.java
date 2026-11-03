@@ -145,7 +145,7 @@ class StorageEngineConcurrencyIT {
                 () -> engine.delete("trips", "city", Comparison.EQUALS, "Aarhus")));
 
         assertInstanceOf(ConflictException.class, failure.getCause());
-        assertConflict(1, 2, "type=overlap_removed");
+        assertConflict(1, 2, "type=removed_partitions_overlap");
         assertEquals(2, engine.catalog("trips").version);
         assertRows(new Object[][] {
                 {"Copenhagen", 12L, 23.5},
