@@ -308,36 +308,18 @@ public final class StorageEngine {
     /**
      * Why this commit cannot rebase, or null when it can. A carried partition is in both catalogs
      * and is not a conflict. A copy removes nothing; a delete conflicts only on the originals it rewrote.
+     * New file names cannot collide: {@link #reservePartitionNumber} hands each one out once.
      */
     private static String conflictType(int base, Rewrite rewrite, CatalogData committed) {
         if (base < 0) {
             return "create";
         }
         Set<String> winnerFiles = fileNames(committed);
-        boolean removed = false;
         for (String file : rewrite.removed()) {
             // The winner no longer has this base file, so it rewrote the same original.
             if (!winnerFiles.contains(file)) {
-                removed = true;
-                break;
+                return "removed_partitions_overlap";
             }
-        }
-        boolean added = false;
-        for (CatalogData.Partition written : rewrite.added()) {
-            // Both commits published this new file.
-            if (winnerFiles.contains(written.dataFile())) {
-                added = true;
-                break;
-            }
-        }
-        if (removed && added) {
-            return "overlap_removed_added";
-        }
-        if (removed) {
-            return "overlap_removed";
-        }
-        if (added) {
-            return "overlap_added";
         }
         return null;
     }
