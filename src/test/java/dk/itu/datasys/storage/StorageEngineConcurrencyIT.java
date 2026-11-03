@@ -110,12 +110,12 @@ class StorageEngineConcurrencyIT {
 
         assertEquals(3, engine.catalog("trips").version);
         assertRows(new Object[][] {
-                {"Aarhus", 187L, 301.0},
-                {"Odense", 95L, 120.75},
                 {"Aalborg", 210L, 340.5},
                 {"Roskilde", 31L, 45.0},
-                {"Esbjerg", 299L, 450.25},
-                MALMO
+                MALMO,
+                {"Aarhus", 187L, 301.0},
+                {"Odense", 95L, 120.75},
+                {"Esbjerg", 299L, 450.25}
         }, query(engine, "SELECT * FROM trips;"));
     }
 
