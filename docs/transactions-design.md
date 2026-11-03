@@ -177,7 +177,19 @@ points to. They are invisible and harmless, but they waste disk space.
 
 How would we find and clean them up?-->
 
-On start-up / close-down non-referenced partitions are cleaned up.
-This avoids cleaning referenced partitions before they have been used by the workflow
-referencing them, as the processes have not yet started or have already finished
-at the point of which we clean up.
+A partition file is an orphan when no catalog entry points at it. That happens when a
+commit never lands: the process crashes after the write, or a writer loses a conflict.
+The file is invisible to readers and only wastes space.
+
+We delete those files when a `StorageEngine` opens, and when it closes. The front
+door closes after the script, including when a statement fails. Both moments are
+quiet: nothing in this process is in the middle of writing a file.
+
+The scan looks at each table directory under the commit lock. It keeps every
+`partition-<n>.bin` the in-memory catalog names, and deletes every other file of
+that shape. `catalog.json` and any other file stay. The lock covers the catalog
+read and the deletes, so a commit cannot publish a file between the two.
+
+A cleanup that ran while a `COPY` or `DELETE` was still writing would see a live
+file with no catalog entry and remove it. We do not do that. A long-lived process
+that wants the disk back without restarting can grow a statement for it later.

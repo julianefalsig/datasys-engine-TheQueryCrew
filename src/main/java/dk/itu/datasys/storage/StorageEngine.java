@@ -19,11 +19,13 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Pattern;
 
-public final class StorageEngine {
+public final class StorageEngine implements AutoCloseable {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(StorageEngine.class);
     private static final int DEFAULT_MAX_ROWS_PER_PARTITION = 10_000;
+    private static final Pattern PARTITION_FILE = Pattern.compile("partition-\\d+\\.bin");
 
     private final Path dataDirectory;
     private final int defaultMaxRowsPerPartition;
@@ -47,6 +49,7 @@ public final class StorageEngine {
         try {
             Files.createDirectories(dataDirectory);
             loadCatalogs();
+            cleanOnOpen();
         } catch (IOException e) {
             throw failed("open", "dir=" + dataDirectory, new UncheckedIOException(e));
         } catch (RuntimeException e) {
@@ -381,8 +384,8 @@ public final class StorageEngine {
      * The next partition file number for {@code tableName}, never handed out twice in this run. Two
      * writers that start from the same version would otherwise both pick maxPartitionNumber + 1, and
      * the second would overwrite the first one's file before either commits. Numbers taken by an
-     * aborted statement stay unused; after a restart the count resumes from the committed catalog,
-     * so at worst an orphan file is overwritten, never a referenced one.
+     * aborted statement stay unused. A restart deletes those files, and the count still resumes
+     * from the committed catalog, so a new file never reuses a name.
      */
     private int reservePartitionNumber(String tableName, CatalogData current) {
         return nextPartitionNumbers
@@ -415,6 +418,75 @@ public final class StorageEngine {
                     op, csvSafe(tableName), partitionIndex, csvSafe(column.name()), csvSafe(stats.min), csvSafe(stats.max));
         }
         return new CatalogData.Partition(dataFileName, partitionRows.size(), statsByColumn);
+    }
+
+    /**
+     * Deletes partition files that no catalog entry points at. The front door calls this after the
+     * script, including when a statement fails. No statement is writing at that point, or at open.
+     */
+    @Override
+    public void close() {
+        try {
+            int removed = removeOrphanPartitions();
+            LOGGER.debug("op=removeOrphans when=close removed={}", removed);
+        } catch (RuntimeException e) {
+            throw failed("removeOrphans", "dir=" + dataDirectory, e);
+        }
+    }
+
+    private void cleanOnOpen() {
+        int removed = removeOrphanPartitions();
+        LOGGER.debug("op=removeOrphans when=open removed={}", removed);
+    }
+
+    private int removeOrphanPartitions() {
+        int removed = 0;
+        try (DirectoryStream<Path> tableDirs = Files.newDirectoryStream(dataDirectory)) {
+            for (Path tableDir : tableDirs) {
+                if (Files.isDirectory(tableDir)) {
+                    removed += removeOrphans(tableDir);
+                }
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        return removed;
+    }
+
+    private int removeOrphans(Path tableDir) {
+        String tableName = tableDir.getFileName().toString();
+        // Hold the commit lock for the whole scan, so a file cannot be published into the catalog
+        // between the moment we decide it is unreferenced and the moment we delete it.
+        synchronized (commitLocks.computeIfAbsent(tableName, t -> new Object())) {
+            Set<String> keep = referencedFiles(tableName);
+            int removed = 0;
+            try (DirectoryStream<Path> files = Files.newDirectoryStream(tableDir)) {
+                for (Path file : files) {
+                    String name = file.getFileName().toString();
+                    if (!PARTITION_FILE.matcher(name).matches() || keep.contains(name)) {
+                        continue;
+                    }
+                    Files.delete(file);
+                    removed++;
+                    LOGGER.debug("op=removeOrphans table={} file={} decision=DELETE", csvSafe(tableName), name);
+                }
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+            return removed;
+        }
+    }
+
+    /** Names the committed catalog points at. Caller holds the commit lock. */
+    private Set<String> referencedFiles(String tableName) {
+        Set<String> keep = new HashSet<>();
+        CatalogData catalog = catalogs.get(tableName);
+        if (catalog != null) {
+            for (CatalogData.Partition partition : catalog.partitions) {
+                keep.add(partition.dataFile());
+            }
+        }
+        return keep;
     }
 
     //method used for the binder. The table's schema, in column order. Throws IllegalArgumentException if the table is unknown.

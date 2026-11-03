@@ -1,6 +1,6 @@
 # datasys-engine-TheQueryCrew
 
-A small SQL engine built for ITU’s *How to Build Data Systems* (Fall 2026), team **The Query Crew**. The stack is Java 25 and Maven. ANTLR 4 generates the lexer/parser from `src/main/antlr4/dk/itu/datasys/sql/Sql.g4` on `mvn compile`; generated Java lands in `target/generated-sources/antlr4` and is not committed. SQL text parses to a typed AST (`CREATE TABLE` / `COPY` / `DELETE` / `SELECT`). A planner turns a bound `SELECT` into a Volcano pipeline (`Scan` → optional `Filter`), pruning partitions from catalog min/max before any data file opens. An executor runs `parse → bind → plan → execute` statement by statement. The storage API creates a table and `COPY`s a headerless CSV into a custom columnar binary format; `SELECT` is planned and drained by `Executor`. Catalogs are JSON (Jackson); data files are our own binary format.
+A small SQL engine built for ITU’s *How to Build Data Systems* (Fall 2026), team **The Query Crew**. The stack is Java 25 and Maven. ANTLR 4 generates the lexer/parser from `src/main/antlr4/dk/itu/datasys/sql/Sql.g4` on `mvn compile`; generated Java lands in `target/generated-sources/antlr4` and is not committed. SQL text parses to a typed AST (`CREATE TABLE` / `COPY` / `SELECT` / `DELETE`). A planner turns a bound `SELECT` into a Volcano pipeline (`Scan` → optional `Filter`), pruning partitions from catalog min/max before any data file opens. An executor runs `parse → bind → plan → execute` statement by statement. The storage API creates a table and `COPY`s a headerless CSV into a custom columnar binary format; `SELECT` is planned and drained by `Executor`. Catalogs are JSON (Jackson); data files are our own binary format.
 
 `mvn test` runs `*Test` unit tests (Surefire). `mvn verify` also runs `*IT` integration tests (Failsafe).
 
@@ -27,9 +27,9 @@ Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
 
 | File | Role |
 |---|---|
-| `src/main/antlr4/dk/itu/datasys/sql/Sql.g4` | Grammar for the Exercise 3 SQL subset. Path under `antlr4/` is the generated Java package. |
+| `src/main/antlr4/dk/itu/datasys/sql/Sql.g4` | Grammar: `CREATE TABLE`, `COPY`, `SELECT`, `DELETE`. Path under `antlr4/` is the generated Java package. |
 | `src/main/java/dk/itu/datasys/sql/SqlAstBuilder.java` | Visitor: ANTLR parse tree → AST records. Types literals as `String` / `Long` / `Double`. |
-| `src/main/java/dk/itu/datasys/sql/Statement.java` | Sealed AST root: `CreateTableStatement`, `CopyStatement`, `SelectStatement`. |
+| `src/main/java/dk/itu/datasys/sql/Statement.java` | Sealed AST root: `CreateTableStatement`, `CopyStatement`, `SelectStatement`, `DeleteStatement`. |
 | `src/main/java/dk/itu/datasys/sql/CreateTableStatement.java` | `CREATE TABLE` (name + `ColumnSpec` list). |
 | `src/main/java/dk/itu/datasys/sql/CopyStatement.java` | `COPY … FROM 'path'`. |
 | `src/main/java/dk/itu/datasys/sql/DeleteStatement.java` | `DELETE FROM …` with optional `WHERE`. |
@@ -52,7 +52,7 @@ Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
 
 | File | Role |
 |---|---|
-| `src/main/java/dk/itu/datasys/storage/StorageEngine.java` | Storage API: `createTable` returns version 0, `copyFile` and `delete` build the next catalog and return the version they committed. Commit swaps under a per-table lock. A moved version aborts with `ConflictException` when the two commits rewrote the same partition, and rebases when they did not. `schema`/`catalog` serve the binder and planner. |
+| `src/main/java/dk/itu/datasys/storage/StorageEngine.java` | Storage API: `createTable` returns version 0, `copyFile` and `delete` build the next catalog and return the version they committed. Commit swaps under a per-table lock. A moved version aborts with `ConflictException` when the two commits rewrote the same partition, and rebases when they did not. Open and `close` delete partition files no catalog entry points at. `schema`/`catalog` serve the binder and planner. |
 | `src/main/java/dk/itu/datasys/storage/ConflictException.java` | A commit lost because another writer rewrote a partition it also rewrote. |
 | `src/main/java/dk/itu/datasys/storage/DeleteResult.java` | Version, rows deleted, partitions rewritten, and partitions carried for one DELETE. |
 | `src/main/java/dk/itu/datasys/storage/RowPredicate.java` | A `WHERE` by column position rather than name. Shared by DELETE and the filter operator. |
@@ -83,6 +83,7 @@ Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
 | `src/test/java/dk/itu/datasys/sql/BinderIT.java` | Binder + `StorageEngine` on `@TempDir` (exercise 3.7). |
 | `src/test/java/dk/itu/datasys/storage/StorageEngineIT.java` | Storage + SQL SELECT integration tests (create/copy/persist/prune). |
 | `src/test/java/dk/itu/datasys/storage/StorageEngineConcurrencyIT.java` | Snapshot reads, and two writers forced to race through `beforeCommit`: disjoint commits rebase, overlapping deletes abort. |
+| `src/test/java/dk/itu/datasys/storage/StorageEngineOrphanIT.java` | Orphan partition cleanup on open and on close, including the file a lost conflict left behind. |
 | `src/test/java/dk/itu/datasys/storage/ColumnTypeTest.java` | Which Java value each column type accepts. |
 | `src/test/java/dk/itu/datasys/exec/FilterOperatorTest.java` | Filter over a stub child, including lexicographic `STRING` order and exhaustion. |
 | `src/test/java/dk/itu/datasys/exec/ScanOperatorTest.java` | Scan over real partition files, including the fully pruned empty-partition case. |
