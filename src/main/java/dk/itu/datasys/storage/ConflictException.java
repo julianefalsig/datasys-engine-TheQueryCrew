@@ -1,8 +1,8 @@
 package dk.itu.datasys.storage;
 
 /**
- * A commit found its table at another version than the one the statement started from: someone
- * else committed in between. First committer wins, so this statement aborts and changes nothing.
+ * A commit found its table at another version, and the two commits rewrote the same original
+ * partition. The statement aborts and changes nothing. Disjoint commits rebase instead.
  */
 public final class ConflictException extends RuntimeException {
 
