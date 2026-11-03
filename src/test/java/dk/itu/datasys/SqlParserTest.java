@@ -1,6 +1,5 @@
 package dk.itu.datasys;
 
-import dk.itu.datasys.sql.CleanOrphansStatement;
 import dk.itu.datasys.sql.CopyStatement;
 import dk.itu.datasys.sql.CreateTableStatement;
 import dk.itu.datasys.sql.DeleteStatement;
@@ -52,8 +51,6 @@ class SqlParserTest {
         assertEquals(
                 new DeleteStatement("trips", Optional.empty()),
                 parseOne("DELETE FROM trips;"));
-        assertEquals(new CleanOrphansStatement(), parseOne("CLEAN ORPHANS;"));
-        assertEquals(new CleanOrphansStatement(), parseOne("clean orphans;"));
     }
 
     @Test

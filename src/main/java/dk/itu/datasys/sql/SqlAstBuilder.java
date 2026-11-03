@@ -58,11 +58,6 @@ public final class SqlAstBuilder extends SqlBaseVisitor<Object> {
     }
 
     @Override
-    public CleanOrphansStatement visitCleanOrphans(SqlParser.CleanOrphansContext ctx) {
-        return new CleanOrphansStatement();
-    }
-
-    @Override
     public DeleteStatement visitDelete(SqlParser.DeleteContext ctx) {
         Optional<Predicate> where = ctx.predicate() == null
                 ? Optional.empty()

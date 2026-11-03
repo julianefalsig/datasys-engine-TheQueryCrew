@@ -23,9 +23,6 @@ public final class Binder {
             case SelectStatement select -> bindWhere(select.tableName(), select.where());
             case CreateTableStatement create -> bindCreateTable(create);
             case DeleteStatement delete -> bindWhere(delete.tableName(), delete.where());
-            case CleanOrphansStatement ignored -> {
-                // Nothing to check: the statement names no table.
-            }
         }
     }
     // The lookup is the check: it throws if the table is unknown. The CSV file is execution's concern.
