@@ -2,6 +2,7 @@ package dk.itu.datasys.exec;
 
 import dk.itu.datasys.SqlParser;
 import dk.itu.datasys.sql.Binder;
+import dk.itu.datasys.sql.CleanOrphansStatement;
 import dk.itu.datasys.sql.CopyStatement;
 import dk.itu.datasys.sql.CreateTableStatement;
 import dk.itu.datasys.sql.DeleteStatement;
@@ -19,7 +20,7 @@ import java.util.List;
 
 /**
  * Runs SQL statement by statement: parse → bind → plan → execute. Stops at the first error.
- * CREATE TABLE, COPY and DELETE call the storage API directly; SELECT drains a planned operator tree.
+ * CREATE TABLE, COPY, DELETE and CLEAN ORPHANS call the storage API directly; SELECT drains a planned operator tree.
  */
 public final class Executor {
 
@@ -111,6 +112,13 @@ public final class Executor {
                         parseMs, bindMs, durationMs(executeStarted), durationMs(startedNanos), result.version());
                 yield null;
             }
+            case CleanOrphansStatement ignored -> {
+                long executeStarted = System.nanoTime();
+                int removed = engine.cleanOrphans();
+                LOGGER.debug("clean_complete removed={} parseMs={} bindMs={} executeMs={} durationMs={}",
+                        removed, parseMs, bindMs, durationMs(executeStarted), durationMs(startedNanos));
+                yield null;
+            }
         };
     }
 
@@ -133,6 +141,7 @@ public final class Executor {
             case CreateTableStatement ignored -> "CREATE";
             case CopyStatement ignored -> "COPY";
             case DeleteStatement ignored -> "DELETE";
+            case CleanOrphansStatement ignored -> "CLEAN";
         };
     }
 
