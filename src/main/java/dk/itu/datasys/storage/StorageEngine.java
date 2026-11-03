@@ -296,7 +296,7 @@ public final class StorageEngine {
                     throw new ConflictException(tableName, base, current, type);
                 }
                 rebase(next, rewrite, committed);
-                LOGGER.debug("rebase table={} base={} current={} version={} dropped={} appended={}",
+                LOGGER.debug("op=rebase table={} base={} current={} version={} dropped={} appended={}",
                         csvSafe(tableName), base, current, next.version,
                         fileList(rewrite.removed()), fileList(rewrite.added()));
             }
