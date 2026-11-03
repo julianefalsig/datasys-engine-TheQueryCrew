@@ -1,5 +1,6 @@
 package dk.itu.datasys.sql;
 
 public sealed interface Statement
-        permits CreateTableStatement, CopyStatement, SelectStatement, DeleteStatement {
+        permits CreateTableStatement, CopyStatement, SelectStatement, DeleteStatement,
+                CleanOrphansStatement {
 }
