@@ -1,6 +1,6 @@
 # datasys-engine-TheQueryCrew
 
-A small SQL engine built for ITU’s *How to Build Data Systems* (Fall 2026), team **The Query Crew**. The stack is Java 25 and Maven. ANTLR 4 generates the lexer/parser from `src/main/antlr4/dk/itu/datasys/sql/Sql.g4` on `mvn compile`; generated Java lands in `target/generated-sources/antlr4` and is not committed. SQL text parses to a typed AST (`CREATE TABLE` / `COPY` / `SELECT`). A planner turns a bound `SELECT` into a Volcano pipeline (`Scan` → optional `Filter`), pruning partitions from catalog min/max before any data file opens. An executor runs `parse → bind → plan → execute` statement by statement. The storage API creates a table and `COPY`s a headerless CSV into a custom columnar binary format; `SELECT` is planned and drained by `Executor`. Catalogs are JSON (Jackson); data files are our own binary format.
+A small SQL engine built for ITU’s *How to Build Data Systems* (Fall 2026), team **The Query Crew**. The stack is Java 25 and Maven. ANTLR 4 generates the lexer/parser from `src/main/antlr4/dk/itu/datasys/sql/Sql.g4` on `mvn compile`; generated Java lands in `target/generated-sources/antlr4` and is not committed. SQL text parses to a typed AST (`CREATE TABLE` / `COPY` / `DELETE` / `SELECT`). A planner turns a bound `SELECT` into a Volcano pipeline (`Scan` → optional `Filter`), pruning partitions from catalog min/max before any data file opens. An executor runs `parse → bind → plan → execute` statement by statement. The storage API creates a table and `COPY`s a headerless CSV into a custom columnar binary format; `SELECT` is planned and drained by `Executor`. Catalogs are JSON (Jackson); data files are our own binary format.
 
 `mvn test` runs `*Test` unit tests (Surefire). `mvn verify` also runs `*IT` integration tests (Failsafe).
 
@@ -32,6 +32,7 @@ Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
 | `src/main/java/dk/itu/datasys/sql/Statement.java` | Sealed AST root: `CreateTableStatement`, `CopyStatement`, `SelectStatement`. |
 | `src/main/java/dk/itu/datasys/sql/CreateTableStatement.java` | `CREATE TABLE` (name + `ColumnSpec` list). |
 | `src/main/java/dk/itu/datasys/sql/CopyStatement.java` | `COPY … FROM 'path'`. |
+| `src/main/java/dk/itu/datasys/sql/DeleteStatement.java` | `DELETE FROM …` with optional `WHERE`. |
 | `src/main/java/dk/itu/datasys/sql/SelectStatement.java` | `SELECT * FROM …` with optional `WHERE`. |
 | `src/main/java/dk/itu/datasys/sql/Predicate.java` | `WHERE` column, `Comparison`, typed constant. |
 | `src/main/java/dk/itu/datasys/sql/Binder.java` | Validates a statement against the catalog (`schema(...)`). |
@@ -43,23 +44,25 @@ Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
 | `src/main/java/dk/itu/datasys/exec/Operator.java` | Volcano pipeline contract: `open()`, `next()` until null, `close()`. |
 | `src/main/java/dk/itu/datasys/exec/ScanOperator.java` | Reads the partitions it is handed, in order. Sees no predicate and prunes nothing. |
 | `src/main/java/dk/itu/datasys/exec/FilterOperator.java` | Passes on the rows its predicate accepts; logs `rowsIn`/`rowsOut` on close. |
-| `src/main/java/dk/itu/datasys/exec/RowPredicate.java` | A `WHERE` by column position rather than name, as the pipeline sees it. |
 | `src/main/java/dk/itu/datasys/exec/Plan.java` | Planned SELECT: operator root, `ScanStats`, and the catalog version pinned at plan time; `drain()` pulls all rows. |
 | `src/main/java/dk/itu/datasys/exec/Planner.java` | Bound SELECT → plan; prunes partitions and emits `decision=READ\|PRUNED` log lines (including `reason=noPredicate` when there is no WHERE). |
-| `src/main/java/dk/itu/datasys/exec/Executor.java` | `parse → bind → plan → execute` per statement; CREATE/COPY call storage directly. Counts `statementNumber` into the MDC from 1, back to 0 when the script ends. Logs `create_complete`, `copy_complete`, and `select_complete` on success (parse/bind/execute timings and `version=`; SELECT also logs plan) and `statement_failed` on bind/operator errors. |
+| `src/main/java/dk/itu/datasys/exec/Executor.java` | `parse → bind → plan → execute` per statement; CREATE/COPY/DELETE call storage directly. Counts `statementNumber` into the MDC from 1, back to 0 when the script ends. Logs `create_complete`, `copy_complete`, `delete_complete`, and `select_complete` on success (parse/bind/execute timings and `version=`; SELECT also logs plan) and `statement_failed` on bind/operator errors. |
 
 ### `dk.itu.datasys.storage`
 
 | File | Role |
 |---|---|
-| `src/main/java/dk/itu/datasys/storage/StorageEngine.java` | Storage API: `createTable` returns version 0, `copyFile` appends partitions and returns the version it committed, `schema`/`catalog` for binder and planner. |
+| `src/main/java/dk/itu/datasys/storage/StorageEngine.java` | Storage API: `createTable` returns version 0, `copyFile` and `delete` build the next catalog and return the version they committed. Commit swaps under a per-table lock. A moved version aborts with `ConflictException` when the two commits rewrote the same partition, and rebases when they did not. `schema`/`catalog` serve the binder and planner. |
+| `src/main/java/dk/itu/datasys/storage/ConflictException.java` | A commit lost because another writer rewrote a partition it also rewrote. |
+| `src/main/java/dk/itu/datasys/storage/DeleteResult.java` | Version, rows deleted, partitions rewritten, and partitions carried for one DELETE. |
+| `src/main/java/dk/itu/datasys/storage/RowPredicate.java` | A `WHERE` by column position rather than name. Shared by DELETE and the filter operator. |
 | `src/main/java/dk/itu/datasys/storage/ColumnType.java` | Column types: `STRING`, `LONG`, `DOUBLE`, and which Java value each accepts. |
 | `src/main/java/dk/itu/datasys/storage/ColumnSpec.java` | One schema column (name + type). Also stored in the catalog JSON. |
 | `src/main/java/dk/itu/datasys/storage/Comparison.java` | Predicate ops: `EQUALS`, `LESS_THAN`, `GREATER_THAN`, and the row test `matches(value, constant, type)`. |
 | `src/main/java/dk/itu/datasys/storage/ScanStats.java` | How many partitions a planned SELECT saw, read, and pruned. |
 | `src/main/java/dk/itu/datasys/storage/CatalogData.java` | In-memory / JSON catalog: schema, `version`, `maxPartitionNumber`, `maxRowsPerPartition`, partitions and typed min/max. |
 | `src/main/java/dk/itu/datasys/storage/CatalogStore.java` | Reads and writes `catalog.json` under each table directory. |
-| `src/main/java/dk/itu/datasys/storage/PartitionFile.java` | Binary layout of one partition file (magic, version, offset table, column chunks). Only `readAllColumns` is open outside the package; writing stays with `copyFile`, so every file has a catalog entry. |
+| `src/main/java/dk/itu/datasys/storage/PartitionFile.java` | Binary layout of one partition file (magic, version, offset table, column chunks). Only `readAllColumns` is open outside the package; `COPY` and `DELETE` write the files, so every file has a catalog entry. |
 | `src/main/java/dk/itu/datasys/storage/ValueCodec.java` | Encode/decode one `LONG` / `DOUBLE` / `STRING` value (little-endian). |
 | `src/main/java/dk/itu/datasys/storage/CsvParser.java` | Headerless positional CSV line → typed `Object[]`. |
 | `src/main/java/dk/itu/datasys/storage/ColumnStats.java` | Min/max over a column and the comparator used for that type. |
@@ -79,7 +82,7 @@ Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
 | `src/test/java/dk/itu/datasys/storage/StorageEngineSmokeTest.java` | End-to-end smoke test on the golden `trips.csv` data. |
 | `src/test/java/dk/itu/datasys/sql/BinderIT.java` | Binder + `StorageEngine` on `@TempDir` (exercise 3.7). |
 | `src/test/java/dk/itu/datasys/storage/StorageEngineIT.java` | Storage + SQL SELECT integration tests (create/copy/persist/prune). |
-| `src/test/java/dk/itu/datasys/storage/StorageEngineConcurrencyIT.java` | Snapshot reads and two writers forced to race through `beforeCommit`. |
+| `src/test/java/dk/itu/datasys/storage/StorageEngineConcurrencyIT.java` | Snapshot reads, and two writers forced to race through `beforeCommit`: disjoint commits rebase, overlapping deletes abort. |
 | `src/test/java/dk/itu/datasys/storage/ColumnTypeTest.java` | Which Java value each column type accepts. |
 | `src/test/java/dk/itu/datasys/exec/FilterOperatorTest.java` | Filter over a stub child, including lexicographic `STRING` order and exhaustion. |
 | `src/test/java/dk/itu/datasys/exec/ScanOperatorTest.java` | Scan over real partition files, including the fully pruned empty-partition case. |
@@ -100,6 +103,7 @@ flowchart TD
     Statement
     CreateTableStatement
     CopyStatement
+    DeleteStatement
     SelectStatement
     Predicate
   end
@@ -107,13 +111,15 @@ flowchart TD
     Operator
     ScanOperator
     FilterOperator
-    RowPredicate
     Plan
     Planner
     Executor
   end
   subgraph storagePkg ["dk.itu.datasys.storage"]
     StorageEngine
+    ConflictException
+    DeleteResult
+    RowPredicate
     CatalogStore
     CatalogData
     PartitionFile
@@ -135,11 +141,15 @@ flowchart TD
   SqlAstBuilder --> Statement
   Statement --> CreateTableStatement
   Statement --> CopyStatement
+  Statement --> DeleteStatement
   Statement --> SelectStatement
   CreateTableStatement --> ColumnSpec
   SelectStatement --> Predicate
   Predicate --> Comparison
   SqlAstBuilder --> ColumnType
+  StorageEngine --> ConflictException
+  StorageEngine --> DeleteResult
+  StorageEngine --> RowPredicate
   StorageEngine --> CatalogStore
   StorageEngine --> CatalogData
   StorageEngine --> PartitionFile
@@ -159,10 +169,10 @@ flowchart TD
   ScanOperator --> Operator
   FilterOperator --> Operator
   FilterOperator --> RowPredicate
-  ScanOperator --> PartitionFile
-  ScanOperator --> ColumnSpec
   RowPredicate --> Comparison
   RowPredicate --> ColumnType
+  ScanOperator --> PartitionFile
+  ScanOperator --> ColumnSpec
   Plan --> Operator
   Plan --> ScanStats
   Planner --> Plan
