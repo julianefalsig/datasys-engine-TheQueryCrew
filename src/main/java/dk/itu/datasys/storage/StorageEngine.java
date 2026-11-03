@@ -11,9 +11,11 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -95,7 +97,7 @@ public final class StorageEngine {
             catalog.columns.addAll(List.copyOf(columns));
 
             // Base -1: the table must still not exist when the commit runs.
-            commit(tableName, -1, catalog);
+            commit(tableName, -1, catalog, Rewrite.NONE);
             LOGGER.debug("op=createTable table={} columns={} version={}",
                     csvSafe(tableName), columns.size(), catalog.version);
             return catalog.version;
@@ -129,7 +131,8 @@ public final class StorageEngine {
             next.maxRowsPerPartition = current.maxRowsPerPartition;
             next.columns.addAll(columns);
             next.partitions.addAll(partitions);
-            commit(tableName, current.version, next);
+            List<CatalogData.Partition> added = partitions.subList(current.partitions.size(), partitions.size());
+            commit(tableName, current.version, next, new Rewrite(Set.of(), added));
 
             long durationMs = System.currentTimeMillis() - start;
             LOGGER.debug("op=copyFile table={} file={} rows={} partitions={} version={} durationMs={}",
@@ -179,6 +182,8 @@ public final class StorageEngine {
                             predicate.comparison(), predicate.constant(), predicate.columnType());
 
             List<CatalogData.Partition> partitions = new ArrayList<>(current.partitions.size());
+            List<CatalogData.Partition> added = new ArrayList<>();
+            Set<String> removed = new HashSet<>();
             int maxPartitionNumber = current.maxPartitionNumber;
             int rowsDeleted = 0;
             int partitionsRewritten = 0;
@@ -222,9 +227,13 @@ public final class StorageEngine {
 
                 rowsDeleted += deleted;
                 partitionsRewritten++;
+                removed.add(partition.dataFile());
                 if (!kept.isEmpty()) {
                     maxPartitionNumber = reservePartitionNumber(tableName, current);
-                    partitions.add(writePartition("delete", tableName, columns, kept, maxPartitionNumber));
+                    CatalogData.Partition rewritten = writePartition(
+                            "delete", tableName, columns, kept, maxPartitionNumber);
+                    added.add(rewritten);
+                    partitions.add(rewritten);
                 }
                 LOGGER.debug("op=delete table={} partition={} decision=REWRITE rowsDeleted={} rowsKept={}",
                         csvSafe(tableName), p, deleted, kept.size());
@@ -239,7 +248,7 @@ public final class StorageEngine {
                 next.maxRowsPerPartition = current.maxRowsPerPartition;
                 next.columns.addAll(columns);
                 next.partitions.addAll(partitions);
-                commit(tableName, current.version, next);
+                commit(tableName, current.version, next, new Rewrite(removed, added));
                 version = next.version;
             }
 
@@ -263,25 +272,91 @@ public final class StorageEngine {
     }
 
     /**
-     * First committer wins. {@code base} is the version the statement started from, or -1 for a table
-     * that does not exist yet. If the committed version has moved since, the statement throws
-     * {@link ConflictException}; the partitions it wrote are never reachable and become orphans.
-     * Validate, save and swap run under the table's lock, one writer per table at a time. Disk first,
-     * then the map, so a failed rename leaves the previous catalog in place.
+     * {@code base} is the version the statement started from, or -1 for a table that does not exist
+     * yet. {@code rewrite} is the partitions this statement removed and the files it wrote.
+     * If the committed version has moved and the two commits rewrote the same original partition,
+     * the statement throws {@link ConflictException} and the partitions it wrote stay unreachable.
+     * If the version moved but the rewritten partitions are disjoint, {@code next} is rebuilt on the
+     * committed catalog and still commits. A create ({@code base} -1) never rebases. {@code next} is
+     * not published yet, so filling it in is not a change to a catalog a reader can see. Validate,
+     * save and swap run under the table's lock, one writer per table at a time. Disk first, then
+     * the map, so a failed rename leaves the previous catalog in place.
      */
-    private void commit(String tableName, int base, CatalogData next) {
+    private void commit(String tableName, int base, CatalogData next, Rewrite rewrite) {
         // Outside the lock, so a test can hold one writer here while another writer commits.
         beforeCommit.run();
         synchronized (commitLocks.computeIfAbsent(tableName, t -> new Object())) {
             CatalogData committed = catalogs.get(tableName);
             int current = committed == null ? -1 : committed.version;
             if (current != base) {
-                LOGGER.debug("conflict table={} base={} current={}", csvSafe(tableName), base, current);
-                throw new ConflictException(tableName, base, current);
+                if (base < 0 || overlaps(rewrite, committed)) {
+                    LOGGER.debug("conflict table={} base={} current={}", csvSafe(tableName), base, current);
+                    throw new ConflictException(tableName, base, current);
+                }
+                rebase(next, rewrite, committed);
+                LOGGER.debug("rebase table={} base={} current={} version={}",
+                        csvSafe(tableName), base, current, next.version);
             }
             CatalogStore.write(tableDirectory(tableName), next);
             catalogs.put(tableName, next);
         }
+    }
+
+    /**
+     * These two checks are the whole overlap. {@code rewrite} is only the files this statement
+     * removed or wrote, so a partition both catalogs still carry is invisible here and not a conflict.
+     * A copy removes nothing; a delete conflicts only on the originals it rewrote.
+     */
+    private static boolean overlaps(Rewrite rewrite, CatalogData committed) {
+        Set<String> winnerFiles = fileNames(committed);
+        for (String removed : rewrite.removed()) {
+            // The winner no longer has this base file, so it rewrote the same original. Rebase would
+            // have nothing to replace and would drop one of the two results.
+            if (!winnerFiles.contains(removed)) {
+                return true;
+            }
+        }
+        for (CatalogData.Partition written : rewrite.added()) {
+            // Both commits published this new file. The partition counter prevents it in one run;
+            // without the check, rebase would list the file twice.
+            if (winnerFiles.contains(written.dataFile())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Drops the originals this statement rewrote and appends the files it wrote. */
+    private static void rebase(CatalogData next, Rewrite rewrite, CatalogData committed) {
+        List<CatalogData.Partition> merged = new ArrayList<>();
+        for (CatalogData.Partition partition : committed.partitions) {
+            if (!rewrite.removed().contains(partition.dataFile())) {
+                merged.add(partition);
+            }
+        }
+        merged.addAll(rewrite.added());
+        next.partitions.clear();
+        next.partitions.addAll(merged);
+        next.version = committed.version + 1;
+        next.maxPartitionNumber = Math.max(next.maxPartitionNumber, committed.maxPartitionNumber);
+    }
+
+    private static Set<String> fileNames(CatalogData catalog) {
+        Set<String> names = new HashSet<>();
+        for (CatalogData.Partition partition : catalog.partitions) {
+            names.add(partition.dataFile());
+        }
+        return names;
+    }
+
+    /**
+     * The original partitions a statement rewrote, and the files it wrote.
+     * A delete's surviving rows are files in {@code added} too: rebase drops {@code removed} and
+     * appends {@code added}, so which original each new file replaced does not matter.
+     */
+    private record Rewrite(Set<String> removed, List<CatalogData.Partition> added) {
+
+        private static final Rewrite NONE = new Rewrite(Set.of(), List.of());
     }
 
     /**
