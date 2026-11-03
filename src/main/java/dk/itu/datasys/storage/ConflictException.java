@@ -6,20 +6,7 @@ package dk.itu.datasys.storage;
  */
 public final class ConflictException extends RuntimeException {
 
-    private final int base;
-    private final int current;
-
-    public ConflictException(String tableName, int base, int current) {
-        super("conflict table=%s base=%d current=%d".formatted(tableName, base, current));
-        this.base = base;
-        this.current = current;
-    }
-
-    public int base() {
-        return base;
-    }
-
-    public int current() {
-        return current;
+    public ConflictException(String tableName, int base, int current, String type) {
+        super("conflict table=%s base=%d current=%d type=%s".formatted(tableName, base, current, type));
     }
 }

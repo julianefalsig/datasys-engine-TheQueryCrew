@@ -117,6 +117,9 @@ class StorageEngineConcurrencyIT {
                 {"Odense", 95L, 120.75},
                 {"Esbjerg", 299L, 450.25}
         }, query(engine, "SELECT * FROM trips;"));
+        assertLogContains("rebase table=trips base=1 current=2 version=3"
+                + " dropped=partition-0.bin;partition-1.bin;partition-3.bin"
+                + " appended=partition-4.bin;partition-5.bin;partition-6.bin");
     }
 
     @Test
@@ -142,7 +145,7 @@ class StorageEngineConcurrencyIT {
                 () -> engine.delete("trips", "city", Comparison.EQUALS, "Aarhus")));
 
         assertInstanceOf(ConflictException.class, failure.getCause());
-        assertConflict(1, 2);
+        assertConflict(1, 2, "type=overlap_removed");
         assertEquals(2, engine.catalog("trips").version);
         assertRows(new Object[][] {
                 {"Copenhagen", 12L, 23.5},
@@ -209,9 +212,18 @@ class StorageEngineConcurrencyIT {
         }
     }
 
+    private void assertLogContains(String needle) throws IOException {
+        for (String[] fields : myLogLines()) {
+            if (fields[6].contains(needle)) {
+                return;
+            }
+        }
+        fail("no log line containing " + needle);
+    }
+
     /** The winner's commit line and the loser's ERROR line, on two different threads. */
-    private void assertConflict(int base, int current) throws IOException {
-        String needle = "conflict table=trips base=%d current=%d".formatted(base, current);
+    private void assertConflict(int base, int current, String type) throws IOException {
+        String needle = "conflict table=trips base=%d current=%d %s".formatted(base, current, type);
         String[] error = null;
         String[] winner = null;
         for (String[] fields : myLogLines()) {

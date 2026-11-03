@@ -289,13 +289,16 @@ public final class StorageEngine {
             CatalogData committed = catalogs.get(tableName);
             int current = committed == null ? -1 : committed.version;
             if (current != base) {
-                if (base < 0 || overlaps(rewrite, committed)) {
-                    LOGGER.debug("conflict table={} base={} current={}", csvSafe(tableName), base, current);
-                    throw new ConflictException(tableName, base, current);
+                String type = conflictType(base, rewrite, committed);
+                if (type != null) {
+                    LOGGER.debug("conflict table={} base={} current={} type={}",
+                            csvSafe(tableName), base, current, type);
+                    throw new ConflictException(tableName, base, current, type);
                 }
                 rebase(next, rewrite, committed);
-                LOGGER.debug("rebase table={} base={} current={} version={}",
-                        csvSafe(tableName), base, current, next.version);
+                LOGGER.debug("rebase table={} base={} current={} version={} dropped={} appended={}",
+                        csvSafe(tableName), base, current, next.version,
+                        fileList(rewrite.removed()), fileList(rewrite.added()));
             }
             CatalogStore.write(tableDirectory(tableName), next);
             catalogs.put(tableName, next);
@@ -303,27 +306,40 @@ public final class StorageEngine {
     }
 
     /**
-     * These two checks are the whole overlap. {@code rewrite} is only the files this statement
-     * removed or wrote, so a partition both catalogs still carry is invisible here and not a conflict.
-     * A copy removes nothing; a delete conflicts only on the originals it rewrote.
+     * Why this commit cannot rebase, or null when it can. A carried partition is in both catalogs
+     * and is not a conflict. A copy removes nothing; a delete conflicts only on the originals it rewrote.
      */
-    private static boolean overlaps(Rewrite rewrite, CatalogData committed) {
+    private static String conflictType(int base, Rewrite rewrite, CatalogData committed) {
+        if (base < 0) {
+            return "create";
+        }
         Set<String> winnerFiles = fileNames(committed);
-        for (String removed : rewrite.removed()) {
-            // The winner no longer has this base file, so it rewrote the same original. Rebase would
-            // have nothing to replace and would drop one of the two results.
-            if (!winnerFiles.contains(removed)) {
-                return true;
+        boolean removed = false;
+        for (String file : rewrite.removed()) {
+            // The winner no longer has this base file, so it rewrote the same original.
+            if (!winnerFiles.contains(file)) {
+                removed = true;
+                break;
             }
         }
+        boolean added = false;
         for (CatalogData.Partition written : rewrite.added()) {
-            // Both commits published this new file. The partition counter prevents it in one run;
-            // without the check, rebase would list the file twice.
+            // Both commits published this new file.
             if (winnerFiles.contains(written.dataFile())) {
-                return true;
+                added = true;
+                break;
             }
         }
-        return false;
+        if (removed && added) {
+            return "overlap_removed_added";
+        }
+        if (removed) {
+            return "overlap_removed";
+        }
+        if (added) {
+            return "overlap_added";
+        }
+        return null;
     }
 
     /** Drops the originals this statement rewrote and appends the files it wrote. */
@@ -339,6 +355,26 @@ public final class StorageEngine {
         next.partitions.addAll(merged);
         next.version = committed.version + 1;
         next.maxPartitionNumber = Math.max(next.maxPartitionNumber, committed.maxPartitionNumber);
+    }
+
+    private static String fileList(Set<String> names) {
+        if (names.isEmpty()) {
+            return "none";
+        }
+        List<String> sorted = new ArrayList<>(names);
+        sorted.sort(String::compareTo);
+        return String.join(";", sorted);
+    }
+
+    private static String fileList(List<CatalogData.Partition> partitions) {
+        if (partitions.isEmpty()) {
+            return "none";
+        }
+        List<String> names = new ArrayList<>(partitions.size());
+        for (CatalogData.Partition partition : partitions) {
+            names.add(partition.dataFile());
+        }
+        return String.join(";", names);
     }
 
     private static Set<String> fileNames(CatalogData catalog) {
