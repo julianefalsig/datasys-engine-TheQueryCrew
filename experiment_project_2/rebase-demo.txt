@@ -1,0 +1,39 @@
+commit: e6c4bd8743b71d3bdf591ec381f3f979417ed9d0
+2026-11-03 12:11:49.301,rebase-demo,0,43,DEBUG,StorageEngine,op=createTable table=trips columns=1 version=0
+2026-11-03 12:11:49.304,rebase-demo,0,43,DEBUG,StorageEngine,op=copyFile table=trips partition=0 column=city min=Aarhus max=Copenhagen
+2026-11-03 12:11:49.308,rebase-demo,0,43,DEBUG,StorageEngine,op=copyFile table=trips file=/var/folders/5p/hd3qyvgs2yj3fc69b966hnfc0000gn/T/rebase-demo9099052991939919626/disjoint/base.csv rows=2 partitions=1 version=1 durationMs=5
+2026-11-03 12:11:49.311,rebase-demo,0,45,DEBUG,StorageEngine,op=delete table=trips partition=1 column=city min=Aarhus max=Aarhus
+2026-11-03 12:11:49.311,rebase-demo,0,45,DEBUG,StorageEngine,op=delete table=trips partition=0 decision=REWRITE rowsDeleted=1 rowsKept=1
+2026-11-03 12:11:49.311,rebase-demo,0,43,DEBUG,StorageEngine,op=copyFile table=trips partition=2 column=city min=Malmo max=Malmo
+2026-11-03 12:11:49.312,rebase-demo,0,43,DEBUG,StorageEngine,op=copyFile table=trips file=/var/folders/5p/hd3qyvgs2yj3fc69b966hnfc0000gn/T/rebase-demo9099052991939919626/disjoint/more.csv rows=1 partitions=1 version=2 durationMs=1
+2026-11-03 12:11:49.313,rebase-demo,0,45,DEBUG,StorageEngine,rebase table=trips base=1 current=2 version=3 dropped=partition-0.bin appended=partition-1.bin
+2026-11-03 12:11:49.314,rebase-demo,0,45,DEBUG,StorageEngine,op=delete table=trips rowsDeleted=1 partitionsRewritten=1 partitionsCarried=0 version=3 durationMs=4
+2026-11-03 12:11:49.315,rebase-demo,0,43,DEBUG,StorageEngine,op=createTable table=trips columns=1 version=0
+2026-11-03 12:11:49.316,rebase-demo,0,43,DEBUG,StorageEngine,op=copyFile table=trips partition=0 column=city min=Aarhus max=Copenhagen
+2026-11-03 12:11:49.316,rebase-demo,0,43,DEBUG,StorageEngine,op=copyFile table=trips file=/var/folders/5p/hd3qyvgs2yj3fc69b966hnfc0000gn/T/rebase-demo9099052991939919626/overlap/base.csv rows=2 partitions=1 version=1 durationMs=0
+2026-11-03 12:11:49.317,rebase-demo,0,46,DEBUG,StorageEngine,op=delete table=trips partition=1 column=city min=Aarhus max=Aarhus
+2026-11-03 12:11:49.317,rebase-demo,0,46,DEBUG,StorageEngine,op=delete table=trips partition=0 decision=REWRITE rowsDeleted=1 rowsKept=1
+2026-11-03 12:11:49.318,rebase-demo,0,43,DEBUG,StorageEngine,op=delete table=trips partition=2 column=city min=Copenhagen max=Copenhagen
+2026-11-03 12:11:49.318,rebase-demo,0,43,DEBUG,StorageEngine,op=delete table=trips partition=0 decision=REWRITE rowsDeleted=1 rowsKept=1
+2026-11-03 12:11:49.318,rebase-demo,0,43,DEBUG,StorageEngine,op=delete table=trips rowsDeleted=1 partitionsRewritten=1 partitionsCarried=0 version=2 durationMs=1
+2026-11-03 12:11:49.319,rebase-demo,0,46,DEBUG,StorageEngine,conflict table=trips base=1 current=2 type=overlap_removed
+2026-11-03 12:11:49.319,rebase-demo,0,46,ERROR,StorageEngine,op=delete table=trips durationMs=2 outcome=FAILED error=ConflictException message=conflict table=trips base=1 current=2 type=overlap_removed
+2026-11-03 12:13:13.042,rebase-demo,0,42,DEBUG,StorageEngine,op=createTable table=trips columns=1 version=0
+2026-11-03 12:13:13.047,rebase-demo,0,42,DEBUG,StorageEngine,op=copyFile table=trips partition=0 column=city min=Aarhus max=Copenhagen
+2026-11-03 12:13:13.050,rebase-demo,0,42,DEBUG,StorageEngine,op=copyFile table=trips file=/var/folders/5p/hd3qyvgs2yj3fc69b966hnfc0000gn/T/rebase-demo3276921504183802134/disjoint/base.csv rows=2 partitions=1 version=1 durationMs=6
+2026-11-03 12:13:13.053,rebase-demo,0,45,DEBUG,StorageEngine,op=delete table=trips partition=1 column=city min=Aarhus max=Aarhus
+2026-11-03 12:13:13.053,rebase-demo,0,45,DEBUG,StorageEngine,op=delete table=trips partition=0 decision=REWRITE rowsDeleted=1 rowsKept=1
+2026-11-03 12:13:13.054,rebase-demo,0,42,DEBUG,StorageEngine,op=copyFile table=trips partition=2 column=city min=Malmo max=Malmo
+2026-11-03 12:13:13.055,rebase-demo,0,42,DEBUG,StorageEngine,op=copyFile table=trips file=/var/folders/5p/hd3qyvgs2yj3fc69b966hnfc0000gn/T/rebase-demo3276921504183802134/disjoint/more.csv rows=1 partitions=1 version=2 durationMs=1
+2026-11-03 12:13:13.055,rebase-demo,0,45,DEBUG,StorageEngine,rebase table=trips base=1 current=2 version=3 dropped=partition-0.bin appended=partition-1.bin
+2026-11-03 12:13:13.056,rebase-demo,0,45,DEBUG,StorageEngine,op=delete table=trips rowsDeleted=1 partitionsRewritten=1 partitionsCarried=0 version=3 durationMs=4
+2026-11-03 12:13:13.057,rebase-demo,0,42,DEBUG,StorageEngine,op=createTable table=trips columns=1 version=0
+2026-11-03 12:13:13.058,rebase-demo,0,42,DEBUG,StorageEngine,op=copyFile table=trips partition=0 column=city min=Aarhus max=Copenhagen
+2026-11-03 12:13:13.059,rebase-demo,0,42,DEBUG,StorageEngine,op=copyFile table=trips file=/var/folders/5p/hd3qyvgs2yj3fc69b966hnfc0000gn/T/rebase-demo3276921504183802134/overlap/base.csv rows=2 partitions=1 version=1 durationMs=1
+2026-11-03 12:13:13.061,rebase-demo,0,46,DEBUG,StorageEngine,op=delete table=trips partition=1 column=city min=Aarhus max=Aarhus
+2026-11-03 12:13:13.061,rebase-demo,0,46,DEBUG,StorageEngine,op=delete table=trips partition=0 decision=REWRITE rowsDeleted=1 rowsKept=1
+2026-11-03 12:13:13.061,rebase-demo,0,42,DEBUG,StorageEngine,op=delete table=trips partition=2 column=city min=Copenhagen max=Copenhagen
+2026-11-03 12:13:13.062,rebase-demo,0,42,DEBUG,StorageEngine,op=delete table=trips partition=0 decision=REWRITE rowsDeleted=1 rowsKept=1
+2026-11-03 12:13:13.063,rebase-demo,0,42,DEBUG,StorageEngine,op=delete table=trips rowsDeleted=1 partitionsRewritten=1 partitionsCarried=0 version=2 durationMs=2
+2026-11-03 12:13:13.063,rebase-demo,0,46,DEBUG,StorageEngine,conflict table=trips base=1 current=2 type=overlap_removed
+2026-11-03 12:13:13.063,rebase-demo,0,46,ERROR,StorageEngine,op=delete table=trips durationMs=3 outcome=FAILED error=ConflictException message=conflict table=trips base=1 current=2 type=overlap_removed

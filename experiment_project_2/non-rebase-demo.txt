@@ -1,0 +1,10 @@
+commit: 12cbe2ddb8141ff6ba1b6a14155b0f041efa82c7
+2026-11-03 12:16:55.996,non-rebase-demo,0,43,DEBUG,StorageEngine,op=createTable table=trips columns=1 version=0
+2026-11-03 12:16:56.000,non-rebase-demo,0,43,DEBUG,StorageEngine,op=copyFile table=trips partition=0 column=city min=Aarhus max=Copenhagen
+2026-11-03 12:16:56.003,non-rebase-demo,0,43,DEBUG,StorageEngine,op=copyFile table=trips file=/var/folders/5p/hd3qyvgs2yj3fc69b966hnfc0000gn/T/non-rebase-demo15212088213345727960/disjoint/base.csv rows=2 partitions=1 version=1 durationMs=5
+2026-11-03 12:16:56.006,non-rebase-demo,0,45,DEBUG,StorageEngine,op=delete table=trips partition=1 column=city min=Aarhus max=Aarhus
+2026-11-03 12:16:56.007,non-rebase-demo,0,45,DEBUG,StorageEngine,op=delete table=trips partition=0 decision=REWRITE rowsDeleted=1 rowsKept=1
+2026-11-03 12:16:56.007,non-rebase-demo,0,43,DEBUG,StorageEngine,op=copyFile table=trips partition=2 column=city min=Malmo max=Malmo
+2026-11-03 12:16:56.008,non-rebase-demo,0,43,DEBUG,StorageEngine,op=copyFile table=trips file=/var/folders/5p/hd3qyvgs2yj3fc69b966hnfc0000gn/T/non-rebase-demo15212088213345727960/disjoint/more.csv rows=1 partitions=1 version=2 durationMs=1
+2026-11-03 12:16:56.008,non-rebase-demo,0,45,DEBUG,StorageEngine,conflict table=trips base=1 current=2
+2026-11-03 12:16:56.008,non-rebase-demo,0,45,ERROR,StorageEngine,op=delete table=trips durationMs=2 outcome=FAILED error=ConflictException message=conflict table=trips base=1 current=2

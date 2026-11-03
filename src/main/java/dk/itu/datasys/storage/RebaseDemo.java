@@ -1,3 +1,4 @@
+// mvn -q -Dexec.mainClass=dk.itu.datasys.storage.RebaseDemo compile exec:java
 package dk.itu.datasys.storage;
 
 import org.slf4j.MDC;
