@@ -79,13 +79,12 @@ class StorageEngineOrphanIT {
     }
 
     @Test
-    void closeRemovesThePartitionALostConflictLeftBehind(@TempDir Path dataDir) throws Exception {
+    void closeRemovesThePartitionsALostDeleteLeftBehind(@TempDir Path dataDir) throws Exception {
         StorageEngine engine = engineWithTrips(dataDir);
         Path tableDir = engine.tableDirectory("trips");
+        // The parked DELETE rewrites three partitions before it learns the other DELETE won.
         Path loserFile = tableDir.resolve("partition-4.bin");
-        Path winnerFile = tableDir.resolve("partition-5.bin");
-        Path loserTrips = writeCsv(dataDir, "loser.csv", "Malmo,10,15.0");
-        Path winnerTrips = writeCsv(dataDir, "winner.csv", "Helsingborg,40,60.0");
+        Path winnerFile = tableDir.resolve("partition-7.bin");
 
         CountDownLatch parked = new CountDownLatch(1);
         CountDownLatch winnerDone = new CountDownLatch(1);
@@ -95,13 +94,13 @@ class StorageEngineOrphanIT {
         };
 
         ExecutorService pool = Executors.newSingleThreadExecutor();
-        Future<?> loser = pool.submit(() -> engine.copyFile("trips", loserTrips.toString()));
+        Future<?> loser = pool.submit(() -> engine.delete("trips", "city", Comparison.EQUALS, "Copenhagen"));
         try {
             assertTrue(parked.await(5, TimeUnit.MINUTES));
             assertTrue(Files.exists(loserFile));
 
             engine.beforeCommit = () -> { };
-            engine.copyFile("trips", winnerTrips.toString());
+            engine.delete("trips", "city", Comparison.EQUALS, "Aarhus");
             winnerDone.countDown();
 
             ExecutionException failure = assertThrows(ExecutionException.class, loser::get);
@@ -115,10 +114,19 @@ class StorageEngineOrphanIT {
         engine.close();
 
         assertFalse(Files.exists(loserFile));
+        assertFalse(Files.exists(tableDir.resolve("partition-5.bin")));
+        assertFalse(Files.exists(tableDir.resolve("partition-6.bin")));
         assertTrue(Files.exists(winnerFile));
-        assertTrue(Files.exists(tableDir.resolve("partition-0.bin")));
-        assertRows(append(ALL_TRIPS, new Object[] {"Helsingborg", 40L, 60.0}),
-                query(new StorageEngine(dataDir, 2), "SELECT * FROM trips;"));
+        assertTrue(Files.exists(tableDir.resolve("partition-1.bin")));
+        assertRows(new Object[][] {
+                {"Copenhagen", 12L, 23.5},
+                {"Odense", 95L, 120.75},
+                {"Copenhagen", 140L, 210.0},
+                {"Aalborg", 210L, 340.5},
+                {"Roskilde", 31L, 45.0},
+                {"Copenhagen", 88L, 99.99},
+                {"Esbjerg", 299L, 450.25}
+        }, query(new StorageEngine(dataDir, 2), "SELECT * FROM trips;"));
     }
 
     private static void await(CountDownLatch latch) {
@@ -145,22 +153,9 @@ class StorageEngineOrphanIT {
         return dest;
     }
 
-    private static Path writeCsv(Path dir, String name, String line) throws IOException {
-        Path path = dir.resolve(name);
-        Files.writeString(path, line + "\n");
-        return path;
-    }
-
     private static List<Object[]> query(StorageEngine engine, String sql) {
         List<List<Object[]>> results = new Executor(engine).execute(sql);
         return results.isEmpty() ? List.of() : results.getFirst();
-    }
-
-    private static Object[][] append(Object[][] rows, Object[] extra) {
-        Object[][] all = new Object[rows.length + 1][];
-        System.arraycopy(rows, 0, all, 0, rows.length);
-        all[rows.length] = extra;
-        return all;
     }
 
     private static void assertRows(Object[][] expected, List<Object[]> actual) {

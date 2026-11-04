@@ -100,54 +100,78 @@ class StorageEngineConcurrencyIT {
     }
 
     @Test
-    void aParkedDeleteAbortsWhenACopyCommitsFirst(@TempDir Path dataDir) throws Exception {
+    void aParkedDeleteCommitsBesideACopy(@TempDir Path dataDir) throws Exception {
         StorageEngine engine = engineWithTrips(dataDir);
         Path moreTrips = writeCsv(dataDir, "more.csv", "Malmo,10,15.0");
 
-        loseTheRace(engine,
+        runRace(engine,
                 () -> engine.delete("trips", "city", Comparison.EQUALS, "Copenhagen"),
                 () -> engine.copyFile("trips", moreTrips.toString()));
 
-        assertConflict(1, 2);
-        assertEquals(2, engine.catalog("trips").version);
-        assertRows(append(ALL_TRIPS, MALMO), query(engine, "SELECT * FROM trips;"));
-
-        engine.delete("trips", "city", Comparison.EQUALS, "Copenhagen");
         assertEquals(3, engine.catalog("trips").version);
         assertRows(new Object[][] {
-                {"Aarhus", 187L, 301.0},
-                {"Odense", 95L, 120.75},
                 {"Aalborg", 210L, 340.5},
                 {"Roskilde", 31L, 45.0},
-                {"Esbjerg", 299L, 450.25},
-                MALMO
+                MALMO,
+                {"Aarhus", 187L, 301.0},
+                {"Odense", 95L, 120.75},
+                {"Esbjerg", 299L, 450.25}
         }, query(engine, "SELECT * FROM trips;"));
+        assertLogContains("op=rebase table=trips base=1 current=2 version=3"
+                + " dropped=partition-0.bin;partition-1.bin;partition-3.bin"
+                + " appended=partition-4.bin;partition-5.bin;partition-6.bin");
     }
 
     @Test
-    void aParkedCopyAbortsWhenAnotherCopyCommitsFirst(@TempDir Path dataDir) throws Exception {
+    void aParkedCopyCommitsBesideAnotherCopy(@TempDir Path dataDir) throws Exception {
         StorageEngine engine = engineWithTrips(dataDir);
         Path loserTrips = writeCsv(dataDir, "loser.csv", "Malmo,10,15.0");
         Path winnerTrips = writeCsv(dataDir, "winner.csv", "Helsingborg,40,60.0");
 
-        loseTheRace(engine,
+        runRace(engine,
                 () -> engine.copyFile("trips", loserTrips.toString()),
                 () -> engine.copyFile("trips", winnerTrips.toString()));
 
-        assertConflict(1, 2);
-        assertEquals(2, engine.catalog("trips").version);
-        assertRows(append(ALL_TRIPS, HELSINGBORG), query(engine, "SELECT * FROM trips;"));
-
-        engine.copyFile("trips", loserTrips.toString());
         assertEquals(3, engine.catalog("trips").version);
         assertRows(append(append(ALL_TRIPS, HELSINGBORG), MALMO), query(engine, "SELECT * FROM trips;"));
     }
 
+    @Test
+    void aParkedDeleteAbortsWhenAnotherDeleteRewroteTheSamePartition(@TempDir Path dataDir) throws Exception {
+        StorageEngine engine = engineWithTrips(dataDir);
+
+        ExecutionException failure = assertThrows(ExecutionException.class, () -> runRace(engine,
+                () -> engine.delete("trips", "city", Comparison.EQUALS, "Copenhagen"),
+                () -> engine.delete("trips", "city", Comparison.EQUALS, "Aarhus")));
+
+        assertInstanceOf(ConflictException.class, failure.getCause());
+        assertConflict(1, 2, "type=removed_partitions_overlap");
+        assertEquals(2, engine.catalog("trips").version);
+        assertRows(new Object[][] {
+                {"Copenhagen", 12L, 23.5},
+                {"Odense", 95L, 120.75},
+                {"Copenhagen", 140L, 210.0},
+                {"Aalborg", 210L, 340.5},
+                {"Roskilde", 31L, 45.0},
+                {"Copenhagen", 88L, 99.99},
+                {"Esbjerg", 299L, 450.25}
+        }, query(engine, "SELECT * FROM trips;"));
+
+        engine.delete("trips", "city", Comparison.EQUALS, "Copenhagen");
+        assertEquals(3, engine.catalog("trips").version);
+        assertRows(new Object[][] {
+                {"Odense", 95L, 120.75},
+                {"Aalborg", 210L, 340.5},
+                {"Roskilde", 31L, 45.0},
+                {"Esbjerg", 299L, 450.25}
+        }, query(engine, "SELECT * FROM trips;"));
+    }
+
     /**
      * Parks {@code loserWork} inside {@code beforeCommit}, lets {@code winnerWork} commit, then
-     * releases the loser into validation. The loser comes back as a {@link ConflictException}.
+     * releases the loser into validation.
      */
-    private static void loseTheRace(StorageEngine engine, Runnable loserWork, Runnable winnerWork) throws Exception {
+    private static void runRace(StorageEngine engine, Runnable loserWork, Runnable winnerWork) throws Exception {
         CountDownLatch parked = new CountDownLatch(1);
         CountDownLatch winnerDone = new CountDownLatch(1);
         engine.beforeCommit = () -> {
@@ -172,9 +196,7 @@ class StorageEngineConcurrencyIT {
             engine.beforeCommit = () -> { };
             winnerWork.run();
             winnerDone.countDown();
-
-            ExecutionException failure = assertThrows(ExecutionException.class, loser::get);
-            assertInstanceOf(ConflictException.class, failure.getCause());
+            loser.get();
         } finally {
             winnerDone.countDown();
             pool.shutdownNow();
@@ -190,9 +212,18 @@ class StorageEngineConcurrencyIT {
         }
     }
 
+    private void assertLogContains(String needle) throws IOException {
+        for (String[] fields : myLogLines()) {
+            if (fields[6].contains(needle)) {
+                return;
+            }
+        }
+        fail("no log line containing " + needle);
+    }
+
     /** The winner's commit line and the loser's ERROR line, on two different threads. */
-    private void assertConflict(int base, int current) throws IOException {
-        String needle = "conflict table=trips base=%d current=%d".formatted(base, current);
+    private void assertConflict(int base, int current, String type) throws IOException {
+        String needle = "conflict table=trips base=%d current=%d %s".formatted(base, current, type);
         String[] error = null;
         String[] winner = null;
         for (String[] fields : myLogLines()) {
@@ -200,7 +231,8 @@ class StorageEngineConcurrencyIT {
             if ("ERROR".equals(fields[4]) && message.contains(needle)) {
                 error = fields;
             }
-            if (message.contains("op=copyFile") && message.contains("version=" + current)) {
+            if (message.contains("version=" + current)
+                    && (message.contains("op=copyFile") || message.contains("op=delete"))) {
                 winner = fields;
             }
         }

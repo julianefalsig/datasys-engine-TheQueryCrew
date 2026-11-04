@@ -178,7 +178,8 @@ points to. They are invisible and harmless, but they waste disk space.
 How would we find and clean them up?-->
 
 A partition file is an orphan when no catalog entry points at it. That happens when a
-commit never lands: the process crashes after the write, or a writer loses a conflict.
+commit never lands: the process crashes after the write, or a delete loses a conflict
+and aborts. A commit that rebases publishes its files, so those stay referenced.
 The file is invisible to readers and only wastes space.
 
 We delete those files when a `StorageEngine` opens, and when it closes. The front
