@@ -1,0 +1,4 @@
+2026-11-05 10:36:28.151,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,3,DEBUG,StorageEngine,op=delete table=trips rowsDeleted=1 partitionsRewritten=1 partitionsCarried=3 version=2 durationMs=2
+2026-11-05 10:36:28.151,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,38,DEBUG,StorageEngine,conflict table=trips base=1 current=2 type=removed_partitions_overlap
+2026-11-05 10:36:28.151,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,38,ERROR,StorageEngine,op=delete table=trips durationMs=4 outcome=FAILED error=ConflictException message=conflict table=trips base=1 current=2 type=removed_partitions_overlap
+2026-11-05 10:36:28.181,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,3,DEBUG,StorageEngine,op=delete table=trips rowsDeleted=3 partitionsRewritten=3 partitionsCarried=1 version=3 durationMs=1

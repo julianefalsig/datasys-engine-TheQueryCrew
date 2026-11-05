@@ -1,0 +1,140 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] -----------------------< dk.itu.datasys:engine >------------------------
+[INFO] Building engine 0.1.0
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- antlr4:4.13.2:antlr4 (default) @ engine ---
+[INFO] No grammars to process
+[INFO] ANTLR 4: Processing source directory /Users/julianefalsighvid/HTBDBS/datasys-engine-TheQueryCrew/src/main/antlr4
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ engine ---
+[INFO] Copying 1 resource from src/main/resources to target/classes
+[INFO] 
+[INFO] --- compiler:3.15.0:compile (default-compile) @ engine ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ engine ---
+[INFO] Copying 2 resources from src/test/resources to target/test-classes
+[INFO] 
+[INFO] --- compiler:3.15.0:testCompile (default-testCompile) @ engine ---
+[INFO] Recompiling the module because of added or removed source files.
+[INFO] Compiling 20 source files with javac [debug release 25] to target/test-classes
+[INFO] 
+[INFO] --- surefire:3.5.6:test (default-test) @ engine ---
+[INFO] 
+[INFO] --- jar:3.4.1:jar (default-jar) @ engine ---
+[INFO] Building jar: /Users/julianefalsighvid/HTBDBS/datasys-engine-TheQueryCrew/target/engine.jar
+[INFO] 
+[INFO] --- shade:3.6.2:shade (default) @ engine ---
+[INFO] Dependency-reduced POM written at: /Users/julianefalsighvid/HTBDBS/datasys-engine-TheQueryCrew/dependency-reduced-pom.xml
+[WARNING] Discovered module-info.class. Shading will break its strong encapsulation.
+[WARNING] Discovered module-info.class. Shading will break its strong encapsulation.
+[WARNING] Discovered module-info.class. Shading will break its strong encapsulation.
+[WARNING] Discovered module-info.class. Shading will break its strong encapsulation.
+[WARNING] antlr4-runtime-4.13.2.jar, engine.jar, jackson-annotations-2.18.2.jar, jackson-core-2.18.2.jar, jackson-databind-2.18.2.jar, log4j-api-2.26.1.jar, log4j-core-2.26.1.jar, log4j-slf4j2-impl-2.26.1.jar, slf4j-api-2.0.18.jar define 1 overlapping resource: 
+[WARNING]   - META-INF/MANIFEST.MF
+[WARNING] jackson-annotations-2.18.2.jar, jackson-core-2.18.2.jar, jackson-databind-2.18.2.jar, log4j-api-2.26.1.jar, log4j-core-2.26.1.jar, log4j-slf4j2-impl-2.26.1.jar define 2 overlapping resources: 
+[WARNING]   - META-INF/LICENSE
+[WARNING]   - META-INF/NOTICE
+[WARNING] log4j-api-2.26.1.jar, log4j-core-2.26.1.jar, log4j-slf4j2-impl-2.26.1.jar define 1 overlapping resource: 
+[WARNING]   - META-INF/DEPENDENCIES
+[WARNING] jackson-core-2.18.2.jar, jackson-databind-2.18.2.jar, slf4j-api-2.0.18.jar define 1 overlapping classes: 
+[WARNING]   - META-INF.versions.9.module-info
+[WARNING] maven-shade-plugin has detected that some files are
+[WARNING] present in two or more JARs. When this happens, only one
+[WARNING] single version of the file is copied to the uber jar.
+[WARNING] Usually this is not harmful and you can skip these warnings,
+[WARNING] otherwise try to manually exclude artifacts based on
+[WARNING] mvn dependency:tree -Ddetail=true and the above output.
+[WARNING] See https://maven.apache.org/plugins/maven-shade-plugin/
+[INFO] Replacing original artifact with shaded artifact.
+[INFO] 
+[INFO] --- failsafe:3.5.6:integration-test (default) @ engine ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running dk.itu.datasys.storage.StorageEngineConcurrencyIT
+10:36:28.104 DEBUG StorageEngine - op=removeOrphans when=open removed=0
+10:36:28.138 DEBUG StorageEngine - op=createTable table=trips columns=3 version=0
+10:36:28.140 DEBUG StorageEngine - op=copyFile table=trips partition=0 column=city min=Aarhus max=Copenhagen
+10:36:28.140 DEBUG StorageEngine - op=copyFile table=trips partition=0 column=distance min=12 max=187
+10:36:28.140 DEBUG StorageEngine - op=copyFile table=trips partition=0 column=price min=23.5 max=301.0
+10:36:28.140 DEBUG StorageEngine - op=copyFile table=trips partition=1 column=city min=Copenhagen max=Odense
+10:36:28.140 DEBUG StorageEngine - op=copyFile table=trips partition=1 column=distance min=95 max=140
+10:36:28.141 DEBUG StorageEngine - op=copyFile table=trips partition=1 column=price min=120.75 max=210.0
+10:36:28.141 DEBUG StorageEngine - op=copyFile table=trips partition=2 column=city min=Aalborg max=Roskilde
+10:36:28.141 DEBUG StorageEngine - op=copyFile table=trips partition=2 column=distance min=31 max=210
+10:36:28.141 DEBUG StorageEngine - op=copyFile table=trips partition=2 column=price min=45.0 max=340.5
+10:36:28.141 DEBUG StorageEngine - op=copyFile table=trips partition=3 column=city min=Copenhagen max=Esbjerg
+10:36:28.141 DEBUG StorageEngine - op=copyFile table=trips partition=3 column=distance min=88 max=299
+10:36:28.141 DEBUG StorageEngine - op=copyFile table=trips partition=3 column=price min=99.99 max=450.25
+10:36:28.146 DEBUG StorageEngine - op=copyFile table=trips file=/var/folders/2q/9y3zc43s0h5f_z2nr_1rmx0h0000gn/T/junit-12376374860663269219/trips.csv rows=8 partitions=4 version=1 durationMs=6
+10:36:28.148 DEBUG StorageEngine - op=delete table=trips partition=4 column=city min=Aarhus max=Aarhus
+10:36:28.148 DEBUG StorageEngine - op=delete table=trips partition=4 column=distance min=187 max=187
+10:36:28.148 DEBUG StorageEngine - op=delete table=trips partition=4 column=price min=301.0 max=301.0
+10:36:28.148 DEBUG StorageEngine - op=delete table=trips partition=0 decision=REWRITE rowsDeleted=1 rowsKept=1
+10:36:28.148 DEBUG StorageEngine - op=delete table=trips partition=5 column=city min=Odense max=Odense
+10:36:28.148 DEBUG StorageEngine - op=delete table=trips partition=5 column=distance min=95 max=95
+10:36:28.148 DEBUG StorageEngine - op=delete table=trips partition=5 column=price min=120.75 max=120.75
+10:36:28.149 DEBUG StorageEngine - op=delete table=trips partition=1 decision=REWRITE rowsDeleted=1 rowsKept=1
+10:36:28.149 DEBUG StorageEngine - op=delete table=trips partition=2 decision=CARRY reason=noMatch
+10:36:28.149 DEBUG StorageEngine - op=delete table=trips partition=6 column=city min=Esbjerg max=Esbjerg
+10:36:28.149 DEBUG StorageEngine - op=delete table=trips partition=6 column=distance min=299 max=299
+10:36:28.149 DEBUG StorageEngine - op=delete table=trips partition=6 column=price min=450.25 max=450.25
+10:36:28.149 DEBUG StorageEngine - op=delete table=trips partition=3 decision=REWRITE rowsDeleted=1 rowsKept=1
+10:36:28.150 DEBUG StorageEngine - op=delete table=trips partition=7 column=city min=Copenhagen max=Copenhagen
+10:36:28.150 DEBUG StorageEngine - op=delete table=trips partition=7 column=distance min=12 max=12
+10:36:28.150 DEBUG StorageEngine - op=delete table=trips partition=7 column=price min=23.5 max=23.5
+10:36:28.150 DEBUG StorageEngine - op=delete table=trips partition=0 decision=REWRITE rowsDeleted=1 rowsKept=1
+10:36:28.150 DEBUG StorageEngine - op=delete table=trips partition=1 decision=CARRY reason=pruned
+10:36:28.150 DEBUG StorageEngine - op=delete table=trips partition=2 decision=CARRY reason=noMatch
+10:36:28.150 DEBUG StorageEngine - op=delete table=trips partition=3 decision=CARRY reason=pruned
+10:36:28.151 DEBUG StorageEngine - op=delete table=trips rowsDeleted=1 partitionsRewritten=1 partitionsCarried=3 version=2 durationMs=2
+10:36:28.151 DEBUG StorageEngine - conflict table=trips base=1 current=2 type=removed_partitions_overlap
+10:36:28.151 ERROR StorageEngine - op=delete table=trips durationMs=4 outcome=FAILED error=ConflictException message=conflict table=trips base=1 current=2 type=removed_partitions_overlap
+10:36:28.177 DEBUG SqlParser - statements=1 durationMs=8
+10:36:28.178 DEBUG StorageEngine - op=schema table=trips columns=3
+10:36:28.179 DEBUG Planner - partition=0 decision=READ reason=noPredicate
+10:36:28.179 DEBUG Planner - partition=1 decision=READ reason=noPredicate
+10:36:28.179 DEBUG Planner - partition=2 decision=READ reason=noPredicate
+10:36:28.179 DEBUG Planner - partition=3 decision=READ reason=noPredicate
+10:36:28.179 DEBUG Planner - op=select table=trips partitionsTotal=4 partitionsRead=4 partitionsPruned=0 version=2
+10:36:28.179 DEBUG ScanOperator - op=scan table=trips partitions=4 rowsOut=7
+10:36:28.179 DEBUG Executor - select_complete rowsOut=7 parseMs=9 bindMs=1 planMs=0 executeMs=0 durationMs=2 version=2
+10:36:28.180 DEBUG StorageEngine - op=delete table=trips partition=0 decision=REWRITE rowsDeleted=1 rowsKept=0
+10:36:28.180 DEBUG StorageEngine - op=delete table=trips partition=8 column=city min=Odense max=Odense
+10:36:28.180 DEBUG StorageEngine - op=delete table=trips partition=8 column=distance min=95 max=95
+10:36:28.180 DEBUG StorageEngine - op=delete table=trips partition=8 column=price min=120.75 max=120.75
+10:36:28.180 DEBUG StorageEngine - op=delete table=trips partition=1 decision=REWRITE rowsDeleted=1 rowsKept=1
+10:36:28.180 DEBUG StorageEngine - op=delete table=trips partition=2 decision=CARRY reason=noMatch
+10:36:28.181 DEBUG StorageEngine - op=delete table=trips partition=9 column=city min=Esbjerg max=Esbjerg
+10:36:28.181 DEBUG StorageEngine - op=delete table=trips partition=9 column=distance min=299 max=299
+10:36:28.181 DEBUG StorageEngine - op=delete table=trips partition=9 column=price min=450.25 max=450.25
+10:36:28.181 DEBUG StorageEngine - op=delete table=trips partition=3 decision=REWRITE rowsDeleted=1 rowsKept=1
+10:36:28.181 DEBUG StorageEngine - op=delete table=trips rowsDeleted=3 partitionsRewritten=3 partitionsCarried=1 version=3 durationMs=1
+10:36:28.181 DEBUG SqlParser - statements=1 durationMs=0
+10:36:28.181 DEBUG StorageEngine - op=schema table=trips columns=3
+10:36:28.182 DEBUG Planner - partition=0 decision=READ reason=noPredicate
+10:36:28.182 DEBUG Planner - partition=1 decision=READ reason=noPredicate
+10:36:28.182 DEBUG Planner - partition=2 decision=READ reason=noPredicate
+10:36:28.182 DEBUG Planner - op=select table=trips partitionsTotal=3 partitionsRead=3 partitionsPruned=0 version=3
+10:36:28.182 DEBUG ScanOperator - op=scan table=trips partitions=3 rowsOut=4
+10:36:28.182 DEBUG Executor - select_complete rowsOut=4 parseMs=0 bindMs=0 planMs=0 executeMs=0 durationMs=0 version=3
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.232 s -- in dk.itu.datasys.storage.StorageEngineConcurrencyIT
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] 
+[INFO] --- failsafe:3.5.6:verify (default) @ engine ---
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  1.948 s
+[INFO] Finished at: 2026-11-05T10:36:28+01:00
+[INFO] ------------------------------------------------------------------------
