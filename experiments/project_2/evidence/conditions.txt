@@ -1,0 +1,12 @@
+date: Thu Nov  5 10:36:25 CET 2026
+ProductName:		macOS
+ProductVersion:		15.6.1
+BuildVersion:		24G90
+Apple M4
+10
+25769803776
+openjdk version "25" 2025-09-16
+OpenJDK Runtime Environment (build 25+36-3489)
+OpenJDK 64-Bit Server VM (build 25+36-3489, mixed mode, sharing)
+commit: dfc9e44
+test: StorageEngineConcurrencyIT#aParkedDeleteAbortsWhenAnotherDeleteRewroteTheSamePartition

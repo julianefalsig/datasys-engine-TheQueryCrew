@@ -1,0 +1,66 @@
+2026-11-05 10:36:28.104,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,3,DEBUG,StorageEngine,op=removeOrphans when=open removed=0
+2026-11-05 10:36:28.138,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,3,DEBUG,StorageEngine,op=createTable table=trips columns=3 version=0
+2026-11-05 10:36:28.140,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,3,DEBUG,StorageEngine,op=copyFile table=trips partition=0 column=city min=Aarhus max=Copenhagen
+2026-11-05 10:36:28.140,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,3,DEBUG,StorageEngine,op=copyFile table=trips partition=0 column=distance min=12 max=187
+2026-11-05 10:36:28.140,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,3,DEBUG,StorageEngine,op=copyFile table=trips partition=0 column=price min=23.5 max=301.0
+2026-11-05 10:36:28.140,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,3,DEBUG,StorageEngine,op=copyFile table=trips partition=1 column=city min=Copenhagen max=Odense
+2026-11-05 10:36:28.140,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,3,DEBUG,StorageEngine,op=copyFile table=trips partition=1 column=distance min=95 max=140
+2026-11-05 10:36:28.141,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,3,DEBUG,StorageEngine,op=copyFile table=trips partition=1 column=price min=120.75 max=210.0
+2026-11-05 10:36:28.141,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,3,DEBUG,StorageEngine,op=copyFile table=trips partition=2 column=city min=Aalborg max=Roskilde
+2026-11-05 10:36:28.141,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,3,DEBUG,StorageEngine,op=copyFile table=trips partition=2 column=distance min=31 max=210
+2026-11-05 10:36:28.141,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,3,DEBUG,StorageEngine,op=copyFile table=trips partition=2 column=price min=45.0 max=340.5
+2026-11-05 10:36:28.141,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,3,DEBUG,StorageEngine,op=copyFile table=trips partition=3 column=city min=Copenhagen max=Esbjerg
+2026-11-05 10:36:28.141,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,3,DEBUG,StorageEngine,op=copyFile table=trips partition=3 column=distance min=88 max=299
+2026-11-05 10:36:28.141,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,3,DEBUG,StorageEngine,op=copyFile table=trips partition=3 column=price min=99.99 max=450.25
+2026-11-05 10:36:28.146,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,3,DEBUG,StorageEngine,op=copyFile table=trips file=/var/folders/2q/9y3zc43s0h5f_z2nr_1rmx0h0000gn/T/junit-12376374860663269219/trips.csv rows=8 partitions=4 version=1 durationMs=6
+2026-11-05 10:36:28.148,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,38,DEBUG,StorageEngine,op=delete table=trips partition=4 column=city min=Aarhus max=Aarhus
+2026-11-05 10:36:28.148,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,38,DEBUG,StorageEngine,op=delete table=trips partition=4 column=distance min=187 max=187
+2026-11-05 10:36:28.148,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,38,DEBUG,StorageEngine,op=delete table=trips partition=4 column=price min=301.0 max=301.0
+2026-11-05 10:36:28.148,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,38,DEBUG,StorageEngine,op=delete table=trips partition=0 decision=REWRITE rowsDeleted=1 rowsKept=1
+2026-11-05 10:36:28.148,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,38,DEBUG,StorageEngine,op=delete table=trips partition=5 column=city min=Odense max=Odense
+2026-11-05 10:36:28.148,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,38,DEBUG,StorageEngine,op=delete table=trips partition=5 column=distance min=95 max=95
+2026-11-05 10:36:28.148,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,38,DEBUG,StorageEngine,op=delete table=trips partition=5 column=price min=120.75 max=120.75
+2026-11-05 10:36:28.149,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,38,DEBUG,StorageEngine,op=delete table=trips partition=1 decision=REWRITE rowsDeleted=1 rowsKept=1
+2026-11-05 10:36:28.149,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,38,DEBUG,StorageEngine,op=delete table=trips partition=2 decision=CARRY reason=noMatch
+2026-11-05 10:36:28.149,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,38,DEBUG,StorageEngine,op=delete table=trips partition=6 column=city min=Esbjerg max=Esbjerg
+2026-11-05 10:36:28.149,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,38,DEBUG,StorageEngine,op=delete table=trips partition=6 column=distance min=299 max=299
+2026-11-05 10:36:28.149,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,38,DEBUG,StorageEngine,op=delete table=trips partition=6 column=price min=450.25 max=450.25
+2026-11-05 10:36:28.149,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,38,DEBUG,StorageEngine,op=delete table=trips partition=3 decision=REWRITE rowsDeleted=1 rowsKept=1
+2026-11-05 10:36:28.150,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,3,DEBUG,StorageEngine,op=delete table=trips partition=7 column=city min=Copenhagen max=Copenhagen
+2026-11-05 10:36:28.150,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,3,DEBUG,StorageEngine,op=delete table=trips partition=7 column=distance min=12 max=12
+2026-11-05 10:36:28.150,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,3,DEBUG,StorageEngine,op=delete table=trips partition=7 column=price min=23.5 max=23.5
+2026-11-05 10:36:28.150,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,3,DEBUG,StorageEngine,op=delete table=trips partition=0 decision=REWRITE rowsDeleted=1 rowsKept=1
+2026-11-05 10:36:28.150,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,3,DEBUG,StorageEngine,op=delete table=trips partition=1 decision=CARRY reason=pruned
+2026-11-05 10:36:28.150,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,3,DEBUG,StorageEngine,op=delete table=trips partition=2 decision=CARRY reason=noMatch
+2026-11-05 10:36:28.150,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,3,DEBUG,StorageEngine,op=delete table=trips partition=3 decision=CARRY reason=pruned
+2026-11-05 10:36:28.151,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,3,DEBUG,StorageEngine,op=delete table=trips rowsDeleted=1 partitionsRewritten=1 partitionsCarried=3 version=2 durationMs=2
+2026-11-05 10:36:28.151,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,38,DEBUG,StorageEngine,conflict table=trips base=1 current=2 type=removed_partitions_overlap
+2026-11-05 10:36:28.151,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,38,ERROR,StorageEngine,op=delete table=trips durationMs=4 outcome=FAILED error=ConflictException message=conflict table=trips base=1 current=2 type=removed_partitions_overlap
+2026-11-05 10:36:28.177,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,3,DEBUG,SqlParser,statements=1 durationMs=8
+2026-11-05 10:36:28.178,it-29497aa9-19de-4f06-82b2-6dffb89b302d,1,3,DEBUG,StorageEngine,op=schema table=trips columns=3
+2026-11-05 10:36:28.179,it-29497aa9-19de-4f06-82b2-6dffb89b302d,1,3,DEBUG,Planner,partition=0 decision=READ reason=noPredicate
+2026-11-05 10:36:28.179,it-29497aa9-19de-4f06-82b2-6dffb89b302d,1,3,DEBUG,Planner,partition=1 decision=READ reason=noPredicate
+2026-11-05 10:36:28.179,it-29497aa9-19de-4f06-82b2-6dffb89b302d,1,3,DEBUG,Planner,partition=2 decision=READ reason=noPredicate
+2026-11-05 10:36:28.179,it-29497aa9-19de-4f06-82b2-6dffb89b302d,1,3,DEBUG,Planner,partition=3 decision=READ reason=noPredicate
+2026-11-05 10:36:28.179,it-29497aa9-19de-4f06-82b2-6dffb89b302d,1,3,DEBUG,Planner,op=select table=trips partitionsTotal=4 partitionsRead=4 partitionsPruned=0 version=2
+2026-11-05 10:36:28.179,it-29497aa9-19de-4f06-82b2-6dffb89b302d,1,3,DEBUG,ScanOperator,op=scan table=trips partitions=4 rowsOut=7
+2026-11-05 10:36:28.179,it-29497aa9-19de-4f06-82b2-6dffb89b302d,1,3,DEBUG,Executor,select_complete rowsOut=7 parseMs=9 bindMs=1 planMs=0 executeMs=0 durationMs=2 version=2
+2026-11-05 10:36:28.180,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,3,DEBUG,StorageEngine,op=delete table=trips partition=0 decision=REWRITE rowsDeleted=1 rowsKept=0
+2026-11-05 10:36:28.180,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,3,DEBUG,StorageEngine,op=delete table=trips partition=8 column=city min=Odense max=Odense
+2026-11-05 10:36:28.180,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,3,DEBUG,StorageEngine,op=delete table=trips partition=8 column=distance min=95 max=95
+2026-11-05 10:36:28.180,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,3,DEBUG,StorageEngine,op=delete table=trips partition=8 column=price min=120.75 max=120.75
+2026-11-05 10:36:28.180,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,3,DEBUG,StorageEngine,op=delete table=trips partition=1 decision=REWRITE rowsDeleted=1 rowsKept=1
+2026-11-05 10:36:28.180,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,3,DEBUG,StorageEngine,op=delete table=trips partition=2 decision=CARRY reason=noMatch
+2026-11-05 10:36:28.181,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,3,DEBUG,StorageEngine,op=delete table=trips partition=9 column=city min=Esbjerg max=Esbjerg
+2026-11-05 10:36:28.181,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,3,DEBUG,StorageEngine,op=delete table=trips partition=9 column=distance min=299 max=299
+2026-11-05 10:36:28.181,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,3,DEBUG,StorageEngine,op=delete table=trips partition=9 column=price min=450.25 max=450.25
+2026-11-05 10:36:28.181,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,3,DEBUG,StorageEngine,op=delete table=trips partition=3 decision=REWRITE rowsDeleted=1 rowsKept=1
+2026-11-05 10:36:28.181,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,3,DEBUG,StorageEngine,op=delete table=trips rowsDeleted=3 partitionsRewritten=3 partitionsCarried=1 version=3 durationMs=1
+2026-11-05 10:36:28.181,it-29497aa9-19de-4f06-82b2-6dffb89b302d,0,3,DEBUG,SqlParser,statements=1 durationMs=0
+2026-11-05 10:36:28.181,it-29497aa9-19de-4f06-82b2-6dffb89b302d,1,3,DEBUG,StorageEngine,op=schema table=trips columns=3
+2026-11-05 10:36:28.182,it-29497aa9-19de-4f06-82b2-6dffb89b302d,1,3,DEBUG,Planner,partition=0 decision=READ reason=noPredicate
+2026-11-05 10:36:28.182,it-29497aa9-19de-4f06-82b2-6dffb89b302d,1,3,DEBUG,Planner,partition=1 decision=READ reason=noPredicate
+2026-11-05 10:36:28.182,it-29497aa9-19de-4f06-82b2-6dffb89b302d,1,3,DEBUG,Planner,partition=2 decision=READ reason=noPredicate
+2026-11-05 10:36:28.182,it-29497aa9-19de-4f06-82b2-6dffb89b302d,1,3,DEBUG,Planner,op=select table=trips partitionsTotal=3 partitionsRead=3 partitionsPruned=0 version=3
+2026-11-05 10:36:28.182,it-29497aa9-19de-4f06-82b2-6dffb89b302d,1,3,DEBUG,ScanOperator,op=scan table=trips partitions=3 rowsOut=4
+2026-11-05 10:36:28.182,it-29497aa9-19de-4f06-82b2-6dffb89b302d,1,3,DEBUG,Executor,select_complete rowsOut=4 parseMs=0 bindMs=0 planMs=0 executeMs=0 durationMs=0 version=3
