@@ -1,0 +1,33 @@
+{
+  "version" : 1,
+  "maxPartitionNumber" : 0,
+  "columns" : [ {
+    "name" : "city",
+    "type" : "STRING"
+  }, {
+    "name" : "distance",
+    "type" : "LONG"
+  }, {
+    "name" : "price",
+    "type" : "DOUBLE"
+  } ],
+  "maxRowsPerPartition" : 10000,
+  "partitions" : [ {
+    "dataFile" : "partition-0.bin",
+    "rowCount" : 4,
+    "stats" : {
+      "city" : {
+        "min" : "Aalborg",
+        "max" : "Odense"
+      },
+      "distance" : {
+        "min" : 12,
+        "max" : 187
+      },
+      "price" : {
+        "min" : 23.5,
+        "max" : 301.0
+      }
+    }
+  } ]
+}
