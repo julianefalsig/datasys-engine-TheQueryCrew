@@ -84,7 +84,7 @@ public final class Binder {
             return;
         }
         throw new IllegalArgumentException(
-                "constant type %s does not match column %s of type %s"
+                "constant type %s does not match column %s.%s of type %s"
                         .formatted(predicate.constant().getClass().getSimpleName(),
                                 column.tableName(), column.column().name(), column.column().type()));
     }
