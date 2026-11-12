@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class BinderIT {
@@ -25,6 +26,24 @@ class BinderIT {
     private static Binder binderWithTrips(Path dataDir) {
         StorageEngine engine = new StorageEngine(dataDir);
         engine.createTable("trips", TRIPS_SCHEMA);
+        return new Binder(engine);
+    }
+
+    private static Binder binderWithOrders(Path dataDir) {
+        StorageEngine engine = new StorageEngine(dataDir);
+        engine.createTable("orders", List.of(
+                new ColumnSpec("o_orderkey", ColumnType.LONG),
+                new ColumnSpec("o_custname", ColumnType.STRING),
+                new ColumnSpec("o_prodname", ColumnType.STRING),
+                new ColumnSpec("o_quantity", ColumnType.LONG),
+                new ColumnSpec("id", ColumnType.LONG)));
+        engine.createTable("customers", List.of(
+                new ColumnSpec("c_name", ColumnType.STRING),
+                new ColumnSpec("c_city", ColumnType.STRING),
+                new ColumnSpec("id", ColumnType.LONG)));
+        engine.createTable("products", List.of(
+                new ColumnSpec("p_name", ColumnType.STRING),
+                new ColumnSpec("p_price", ColumnType.DOUBLE)));
         return new Binder(engine);
     }
 
@@ -114,8 +133,21 @@ class BinderIT {
     void selectFromAnUnknownTableThrows(@TempDir Path dataDir) {
         Binder binder = binderWithTrips(dataDir);
 
-        assertThrows(IllegalArgumentException.class,
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
                 () -> binder.bind(new SelectStatement(List.of("missing"), List.of(), List.of())));
+
+        assertEquals("unknown table: missing", error.getMessage());
+    }
+
+    // orders is real; the failure names the table that is not.
+    @Test
+    void aMissingTableLaterInTheFromListThrows(@TempDir Path dataDir) {
+        Binder binder = binderWithOrders(dataDir);
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> binder.bind(new SelectStatement(List.of("orders", "cities"), List.of(), List.of())));
+
+        assertEquals("unknown table: cities", error.getMessage());
     }
 
     // The table exists but has no such column, so the predicate can never be evaluated.
@@ -172,6 +204,53 @@ class BinderIT {
         assertThrows(IllegalArgumentException.class,
                 () -> binder.bind(new DeleteStatement("trips",
                         Optional.of(new Predicate("missing", Comparison.EQUALS, "Copenhagen")))));
+    }
+
+    // o_custname and c_name are both STRING, and they live on different tables.
+    @Test
+    void aJoinOfMatchingColumnsBinds(@TempDir Path dataDir) {
+        Binder binder = binderWithOrders(dataDir);
+
+        assertDoesNotThrow(() -> binder.bind(new SelectStatement(
+                List.of("orders", "customers"),
+                List.of(new Predicate("c_city", Comparison.EQUALS, "Copenhagen")),
+                List.of(new JoinPredicate("o_custname", "c_name")))));
+    }
+
+    // id is on both orders and customers, so the name does not pick a table.
+    @Test
+    void anAmbiguousColumnThrows(@TempDir Path dataDir) {
+        Binder binder = binderWithOrders(dataDir);
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> binder.bind(new SelectStatement(List.of("orders", "customers"),
+                        List.of(new Predicate("id", Comparison.EQUALS, 1L)), List.of())));
+
+        assertEquals("ambiguous column: id", error.getMessage());
+    }
+
+    // A LONG and a DOUBLE never compare equal under Java equals, so the join is rejected.
+    @Test
+    void aJoinAcrossMismatchedTypesThrows(@TempDir Path dataDir) {
+        Binder binder = binderWithOrders(dataDir);
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> binder.bind(new SelectStatement(List.of("orders", "products"), List.of(),
+                        List.of(new JoinPredicate("o_orderkey", "p_price")))));
+
+        assertEquals("join columns have different types: o_orderkey is LONG, p_price is DOUBLE", error.getMessage());
+    }
+
+    // Both names resolve, but a join has to connect two tables.
+    @Test
+    void aJoinWhoseColumnsShareATableThrows(@TempDir Path dataDir) {
+        Binder binder = binderWithOrders(dataDir);
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> binder.bind(new SelectStatement(List.of("orders", "customers"), List.of(),
+                        List.of(new JoinPredicate("o_custname", "o_prodname")))));
+
+        assertEquals("join columns o_custname and o_prodname are both on table orders", error.getMessage());
     }
 
     // price = 'x' compares a DOUBLE column against a String.
