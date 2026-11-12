@@ -36,7 +36,8 @@ Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
 | `src/main/java/dk/itu/datasys/sql/SelectStatement.java` | `SELECT * FROM` a table list, plus filter and join lists. |
 | `src/main/java/dk/itu/datasys/sql/Predicate.java` | A column compared with a typed constant. |
 | `src/main/java/dk/itu/datasys/sql/JoinPredicate.java` | A column compared with another column. |
-| `src/main/java/dk/itu/datasys/sql/Binder.java` | Validates a statement against the catalog (`schema(...)`). |
+| `src/main/java/dk/itu/datasys/sql/ColumnResolver.java` | FROM-list schemas concatenated in order. An unqualified name maps to one table and its index in that row. |
+| `src/main/java/dk/itu/datasys/sql/Binder.java` | Validates a statement against the catalog (`schema(...)`). A name must hit exactly one listed column; a join must span two tables of the same type. |
 
 ### `dk.itu.datasys.exec`
 
@@ -81,7 +82,8 @@ Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
 | `src/test/java/dk/itu/datasys/storage/PrunerTest.java` | Partition prune-or-read decisions. |
 | `src/test/java/dk/itu/datasys/storage/CsvParserTest.java` | Headerless CSV line parsing. |
 | `src/test/java/dk/itu/datasys/storage/StorageEngineSmokeTest.java` | End-to-end smoke test on the golden `trips.csv` data. |
-| `src/test/java/dk/itu/datasys/sql/BinderIT.java` | Binder + `StorageEngine` on `@TempDir` (exercise 3.7). |
+| `src/test/java/dk/itu/datasys/sql/ColumnResolverTest.java` | Unqualified name to table and concatenated index; unknown and ambiguous names throw. |
+| `src/test/java/dk/itu/datasys/sql/BinderIT.java` | Binder + `StorageEngine` on `@TempDir`: unknown, ambiguous, same-table, and type-mismatched joins. |
 | `src/test/java/dk/itu/datasys/storage/StorageEngineIT.java` | Storage + SQL SELECT integration tests (create/copy/persist/prune). |
 | `src/test/java/dk/itu/datasys/storage/StorageEngineConcurrencyIT.java` | Snapshot reads, and two writers forced to race through `beforeCommit`: disjoint commits rebase, overlapping deletes abort. |
 | `src/test/java/dk/itu/datasys/storage/StorageEngineOrphanIT.java` | Orphan partition cleanup on open and on close, including the file a lost conflict left behind. |
