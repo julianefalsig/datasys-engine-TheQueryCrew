@@ -20,7 +20,7 @@ public final class Binder {
     public void bind(Statement statement) {
         switch (statement) {
             case CopyStatement copy -> bindCopy(copy);
-            case SelectStatement select -> bindWhere(select.tableName(), select.where());
+            case SelectStatement select -> bindSelect(select);
             case CreateTableStatement create -> bindCreateTable(create);
             case DeleteStatement delete -> bindWhere(delete.tableName(), delete.where());
         }
@@ -28,6 +28,26 @@ public final class Binder {
     // The lookup is the check: it throws if the table is unknown. The CSV file is execution's concern.
     private void bindCopy(CopyStatement copy) {
         engine.schema(copy.tableName());
+    }
+
+    // A single table, with each filter checked the same way DELETE checks its WHERE.
+    // Joins and table lists are resolved in the next part of the exercise.
+    private void bindSelect(SelectStatement select) {
+        if (select.tableNames().size() != 1) {
+            throw new IllegalArgumentException(
+                    "SELECT from more than one table is not supported yet: " + select.tableNames());
+        }
+        if (!select.joins().isEmpty()) {
+            throw new IllegalArgumentException("join predicates are not supported yet");
+        }
+        String tableName = select.tableNames().getFirst();
+        if (select.filters().isEmpty()) {
+            bindWhere(tableName, Optional.empty());
+            return;
+        }
+        for (Predicate filter : select.filters()) {
+            bindWhere(tableName, Optional.of(filter));
+        }
     }
 
     // SELECT and DELETE check the same things: the table exists, and a WHERE fits its schema.

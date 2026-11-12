@@ -28,13 +28,14 @@ Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
 | File | Role |
 |---|---|
 | `src/main/antlr4/dk/itu/datasys/sql/Sql.g4` | Grammar: `CREATE TABLE`, `COPY`, `SELECT`, `DELETE`. Path under `antlr4/` is the generated Java package. |
-| `src/main/java/dk/itu/datasys/sql/SqlAstBuilder.java` | Visitor: ANTLR parse tree → AST records. Types literals as `String` / `Long` / `Double`. |
+| `src/main/java/dk/itu/datasys/sql/SqlAstBuilder.java` | Visitor: ANTLR parse tree → AST records. Types literals as `String` / `Long` / `Double`. Sorts a `SELECT` conjunction into filters and joins. |
 | `src/main/java/dk/itu/datasys/sql/Statement.java` | Sealed AST root: `CreateTableStatement`, `CopyStatement`, `SelectStatement`, `DeleteStatement`. |
 | `src/main/java/dk/itu/datasys/sql/CreateTableStatement.java` | `CREATE TABLE` (name + `ColumnSpec` list). |
 | `src/main/java/dk/itu/datasys/sql/CopyStatement.java` | `COPY … FROM 'path'`. |
 | `src/main/java/dk/itu/datasys/sql/DeleteStatement.java` | `DELETE FROM …` with optional `WHERE`. |
-| `src/main/java/dk/itu/datasys/sql/SelectStatement.java` | `SELECT * FROM …` with optional `WHERE`. |
-| `src/main/java/dk/itu/datasys/sql/Predicate.java` | `WHERE` column, `Comparison`, typed constant. |
+| `src/main/java/dk/itu/datasys/sql/SelectStatement.java` | `SELECT * FROM` a table list, plus filter and join lists. |
+| `src/main/java/dk/itu/datasys/sql/Predicate.java` | A column compared with a typed constant. |
+| `src/main/java/dk/itu/datasys/sql/JoinPredicate.java` | A column compared with another column. |
 | `src/main/java/dk/itu/datasys/sql/Binder.java` | Validates a statement against the catalog (`schema(...)`). |
 
 ### `dk.itu.datasys.exec`
@@ -107,6 +108,7 @@ flowchart TD
     DeleteStatement
     SelectStatement
     Predicate
+    JoinPredicate
   end
   subgraph execPkg ["dk.itu.datasys.exec"]
     Operator
@@ -146,6 +148,7 @@ flowchart TD
   Statement --> SelectStatement
   CreateTableStatement --> ColumnSpec
   SelectStatement --> Predicate
+  SelectStatement --> JoinPredicate
   Predicate --> Comparison
   SqlAstBuilder --> ColumnType
   StorageEngine --> ConflictException

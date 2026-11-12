@@ -19,7 +19,6 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
@@ -82,7 +81,7 @@ class StorageEngineConcurrencyIT {
     void aScanKeepsTheRowsOfTheVersionItPinned(@TempDir Path dataDir) throws IOException {
         StorageEngine engine = engineWithTrips(dataDir);
 
-        Plan plan = new Planner(engine).plan(new SelectStatement("trips", Optional.empty()));
+        Plan plan = new Planner(engine).plan(new SelectStatement(List.of("trips"), List.of(), List.of()));
         Operator scan = plan.root();
         scan.open();
         engine.delete("trips", "city", Comparison.EQUALS, "Copenhagen");

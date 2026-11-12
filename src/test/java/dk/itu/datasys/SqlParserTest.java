@@ -3,6 +3,7 @@ package dk.itu.datasys;
 import dk.itu.datasys.sql.CopyStatement;
 import dk.itu.datasys.sql.CreateTableStatement;
 import dk.itu.datasys.sql.DeleteStatement;
+import dk.itu.datasys.sql.JoinPredicate;
 import dk.itu.datasys.sql.Predicate;
 import dk.itu.datasys.sql.SelectStatement;
 import dk.itu.datasys.sql.Statement;
@@ -38,11 +39,12 @@ class SqlParserTest {
                 new CopyStatement("trips", "trips.csv"),
                 parseOne("COPY trips FROM 'trips.csv';"));
         assertEquals(
-                new SelectStatement("trips", Optional.of(
-                        new Predicate("distance", Comparison.GREATER_THAN, 100L))),
+                new SelectStatement(List.of("trips"),
+                        List.of(new Predicate("distance", Comparison.GREATER_THAN, 100L)),
+                        List.of()),
                 parseOne("SELECT * FROM trips WHERE distance > 100;"));
         assertEquals(
-                new SelectStatement("trips", Optional.empty()),
+                new SelectStatement(List.of("trips"), List.of(), List.of()),
                 parseOne("SELECT * FROM trips;"));
         assertEquals(
                 new DeleteStatement("trips", Optional.of(
@@ -74,10 +76,10 @@ class SqlParserTest {
     @Test
     void keywordsAreCaseInsensitiveAndIdentifierCasingIsPreserved() {
         assertEquals(
-                new SelectStatement("trips", Optional.empty()),
+                new SelectStatement(List.of("trips"), List.of(), List.of()),
                 parseOne("select * from trips;"));
         assertEquals(
-                new SelectStatement("Trips", Optional.empty()),
+                new SelectStatement(List.of("Trips"), List.of(), List.of()),
                 parseOne("SELECT * FROM Trips;"));
     }
 
@@ -112,6 +114,35 @@ class SqlParserTest {
         assertEquals(parseOne("SELECT * FROM trips WHERE distance > 100;"), parseOne(messy));
     }
 
+    @Test
+    void tableListsAndConjunctionsSplitFiltersFromJoins() {
+        assertEquals(
+                new SelectStatement(List.of("orders", "customers"), List.of(),
+                        List.of(new JoinPredicate("o_custname", "c_name"))),
+                parseOne("SELECT * FROM orders, customers WHERE o_custname = c_name;"));
+        assertEquals(
+                new SelectStatement(List.of("orders", "customers", "products"),
+                        List.of(new Predicate("c_city", Comparison.EQUALS, "Copenhagen")),
+                        List.of(new JoinPredicate("o_custname", "c_name"),
+                                new JoinPredicate("o_prodname", "p_name"))),
+                parseOne("""
+                        SELECT * FROM orders, customers, products
+                        WHERE o_custname = c_name AND o_prodname = p_name AND c_city = 'Copenhagen';
+                        """));
+        // A filter written before a join still lands in filters; the join lands in joins.
+        assertEquals(
+                new SelectStatement(List.of("orders", "customers"),
+                        List.of(new Predicate("o_quantity", Comparison.GREATER_THAN, 1L)),
+                        List.of(new JoinPredicate("o_custname", "c_name"))),
+                parseOne("SELECT * FROM orders, customers WHERE o_quantity > 1 AND o_custname = c_name;"));
+        // DELETE statements should not have joins
+        assertThrows(SqlParseException.class,
+                () -> parser.parse("DELETE FROM orders WHERE o_custname = c_name;"));
+        // OR predicates are not supported
+        assertThrows(SqlParseException.class,
+                () -> parser.parse("SELECT * FROM orders WHERE a = 1 OR b = 2;"));
+    }
+
     private Statement parseOne(String sql) {
         List<Statement> statements = parser.parse(sql);
         assertEquals(1, statements.size());
@@ -120,6 +151,6 @@ class SqlParserTest {
 
     private Object constantOf(String sql) {
         SelectStatement select = (SelectStatement) parseOne(sql);
-        return select.where().orElseThrow().constant();
+        return select.filters().getFirst().constant();
     }
 }

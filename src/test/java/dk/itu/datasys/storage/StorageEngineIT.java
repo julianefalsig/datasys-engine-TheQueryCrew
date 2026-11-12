@@ -13,8 +13,6 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Optional;
-
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -159,8 +157,8 @@ class StorageEngineIT {
     @Test
     void pruning(@TempDir Path dataDir) throws IOException {
         StorageEngine engine = engineWithTrips(dataDir, "trips_sorted.csv");
-        var plan = new Planner(engine).plan(new SelectStatement("trips",
-                Optional.of(new Predicate("distance", Comparison.GREATER_THAN, 200L))));
+        var plan = new Planner(engine).plan(new SelectStatement(List.of("trips"),
+                List.of(new Predicate("distance", Comparison.GREATER_THAN, 200L)), List.of()));
 
         assertTrue(plan.stats().partitionsPruned() >= 2);
         assertRows(new Object[][] {

@@ -33,7 +33,14 @@ public final class Planner {
     }
 
     public Plan plan(SelectStatement select) {
-        String tableName = select.tableName();
+        if (select.tableNames().size() != 1) {
+            throw new IllegalArgumentException(
+                    "SELECT from more than one table is not planned yet: " + select.tableNames());
+        }
+        if (!select.joins().isEmpty()) {
+            throw new IllegalArgumentException("join predicates are not planned yet");
+        }
+        String tableName = select.tableNames().getFirst();
         CatalogData catalog = engine.catalog(tableName);
         int version = catalog.version;
         List<CatalogData.Partition> partitions = List.copyOf(catalog.partitions);
@@ -42,7 +49,7 @@ public final class Planner {
 
         // No where clause -> read all partitions.
         // Operator expects a list of Paths to the partition files, we build it here.
-        if (select.where().isEmpty()) {
+        if (select.filters().isEmpty()) {
             List<Path> allPartitions = new ArrayList<>(partitions.size());
             for (int p = 0; p < partitions.size(); p++) {
                 CatalogData.Partition partition = partitions.get(p);
@@ -55,11 +62,10 @@ public final class Planner {
             return new Plan(new ScanOperator(tableName, columns, allPartitions), stats, version);
         }
 
-        // There is a where clause -> we prune partitions
-        // We also construct the row predicate for the filter operator.
-        Predicate predicate = select.where().get();
-        int columnIndex = columnIndex(columns, predicate.columnName(), tableName);
-        ColumnSpec predicateColumn = columns.get(columnIndex);
+        // There is a where clause -> we prune partitions on the first filter.
+        // Later filters wrap the same scan; a single filter is still Filter(Scan).
+        Predicate predicate = select.filters().getFirst();
+        ColumnSpec predicateColumn = columns.get(columnIndex(columns, predicate.columnName(), tableName));
         Comparison comparison = predicate.comparison();
         Object constant = predicate.constant();
 
@@ -90,11 +96,15 @@ public final class Planner {
         ScanStats stats = new ScanStats(partitionsTotal, partitionsKept, partitionsPruned);
         logScanStats(tableName, stats, version);
 
-        // Build the plan from the leaf -> root.
-        Operator scan = new ScanOperator(tableName, columns, surviving);
-        RowPredicate rowPredicate = new RowPredicate(
-                columnIndex, comparison, constant, predicateColumn.type());
-        return new Plan(new FilterOperator(scan, rowPredicate), stats, version);
+        // Build the plan from the leaf -> root. Each filter is one operator, in list order.
+        Operator pipeline = new ScanOperator(tableName, columns, surviving);
+        for (Predicate filter : select.filters()) {
+            int filterColumn = columnIndex(columns, filter.columnName(), tableName);
+            ColumnSpec column = columns.get(filterColumn);
+            pipeline = new FilterOperator(pipeline, new RowPredicate(
+                    filterColumn, filter.comparison(), filter.constant(), column.type()));
+        }
+        return new Plan(pipeline, stats, version);
     }
 
     private static void logScanStats(String tableName, ScanStats stats, int version) {

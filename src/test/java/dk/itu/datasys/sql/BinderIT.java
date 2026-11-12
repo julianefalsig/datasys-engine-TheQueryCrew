@@ -97,7 +97,7 @@ class BinderIT {
     void selectWithoutWhereBinds(@TempDir Path dataDir) {
         Binder binder = binderWithTrips(dataDir);
 
-        assertDoesNotThrow(() -> binder.bind(new SelectStatement("trips", Optional.empty())));
+        assertDoesNotThrow(() -> binder.bind(new SelectStatement(List.of("trips"), List.of(), List.of())));
     }
 
     // distance is a LONG column and 100L is a Long, so the predicate lines up.
@@ -105,8 +105,8 @@ class BinderIT {
     void selectWithAMatchingPredicateBinds(@TempDir Path dataDir) {
         Binder binder = binderWithTrips(dataDir);
 
-        assertDoesNotThrow(() -> binder.bind(new SelectStatement("trips",
-                Optional.of(new Predicate("distance", Comparison.GREATER_THAN, 100L)))));
+        assertDoesNotThrow(() -> binder.bind(new SelectStatement(List.of("trips"),
+                List.of(new Predicate("distance", Comparison.GREATER_THAN, 100L)), List.of())));
     }
 
     // No such table, exactly as for COPY.
@@ -115,7 +115,7 @@ class BinderIT {
         Binder binder = binderWithTrips(dataDir);
 
         assertThrows(IllegalArgumentException.class,
-                () -> binder.bind(new SelectStatement("missing", Optional.empty())));
+                () -> binder.bind(new SelectStatement(List.of("missing"), List.of(), List.of())));
     }
 
     // The table exists but has no such column, so the predicate can never be evaluated.
@@ -124,8 +124,8 @@ class BinderIT {
         Binder binder = binderWithTrips(dataDir);
 
         assertThrows(IllegalArgumentException.class,
-                () -> binder.bind(new SelectStatement("trips",
-                        Optional.of(new Predicate("missing", Comparison.EQUALS, "Copenhagen")))));
+                () -> binder.bind(new SelectStatement(List.of("trips"),
+                        List.of(new Predicate("missing", Comparison.EQUALS, "Copenhagen")), List.of())));
     }
 
     // distance = 'x' compares a LONG column against a String.
@@ -134,8 +134,8 @@ class BinderIT {
         Binder binder = binderWithTrips(dataDir);
 
         assertThrows(IllegalArgumentException.class,
-                () -> binder.bind(new SelectStatement("trips",
-                        Optional.of(new Predicate("distance", Comparison.EQUALS, "x")))));
+                () -> binder.bind(new SelectStatement(List.of("trips"),
+                        List.of(new Predicate("distance", Comparison.EQUALS, "x")), List.of())));
     }
 
     // No WHERE deletes every row; the table is the only thing there is to check.
