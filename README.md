@@ -37,7 +37,7 @@ Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
 | `src/main/java/dk/itu/datasys/sql/Predicate.java` | A column compared with a typed constant. |
 | `src/main/java/dk/itu/datasys/sql/JoinPredicate.java` | A column compared with another column. |
 | `src/main/java/dk/itu/datasys/sql/ColumnResolver.java` | FROM-list schemas concatenated in order. An unqualified name maps to one table and its index in that row. |
-| `src/main/java/dk/itu/datasys/sql/Binder.java` | Validates a statement against the catalog (`schema(...)`). A name must hit exactly one listed column; a join must span two tables of the same type. |
+| `src/main/java/dk/itu/datasys/sql/Binder.java` | Validates a statement against the catalog (`schema(...)`). |
 
 ### `dk.itu.datasys.exec`
 
