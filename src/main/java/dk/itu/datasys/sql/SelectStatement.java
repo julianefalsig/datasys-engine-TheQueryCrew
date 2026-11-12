@@ -1,7 +1,7 @@
 package dk.itu.datasys.sql;
 
-import java.util.Optional;
+import java.util.List;
 
-public record SelectStatement(String tableName, Optional<Predicate> where)
-        implements Statement {
+public record SelectStatement(List<String> tableNames, List<Predicate> filters,
+        List<JoinPredicate> joins) implements Statement {
 }
