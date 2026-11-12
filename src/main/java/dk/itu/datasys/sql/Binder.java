@@ -3,8 +3,8 @@ package dk.itu.datasys.sql;
 import dk.itu.datasys.storage.ColumnSpec;
 import dk.itu.datasys.storage.StorageEngine;
 
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 //Checks a parsed statement against the catalog
 
@@ -22,52 +22,87 @@ public final class Binder {
             case CopyStatement copy -> bindCopy(copy);
             case SelectStatement select -> bindSelect(select);
             case CreateTableStatement create -> bindCreateTable(create);
-            case DeleteStatement delete -> bindWhere(delete.tableName(), delete.where());
+            case DeleteStatement delete -> bindDelete(delete);
         }
     }
-    // The lookup is the check: it throws if the table is unknown. The CSV file is execution's concern.
+    // The CSV file is execution's concern. The table is not: a missing one fails here.
     private void bindCopy(CopyStatement copy) {
-        engine.schema(copy.tableName());
+        requireTable(copy.tableName());
     }
 
-    // A single table, with each filter checked the same way DELETE checks its WHERE.
-    // Joins and table lists are resolved in the next part of the exercise.
+    // Each name must land on exactly one column of the FROM list. A join must pair two tables of one type.
     private void bindSelect(SelectStatement select) {
-        if (select.tableNames().size() != 1) {
-            throw new IllegalArgumentException(
-                    "SELECT from more than one table is not supported yet: " + select.tableNames());
+        List<String> tableNames = select.tableNames();
+        List<List<ColumnSpec>> schemas = new ArrayList<>(tableNames.size());
+        for (String tableName : tableNames) {
+            schemas.add(requireTable(tableName));
         }
-        if (!select.joins().isEmpty()) {
-            throw new IllegalArgumentException("join predicates are not supported yet");
-        }
-        String tableName = select.tableNames().getFirst();
-        if (select.filters().isEmpty()) {
-            bindWhere(tableName, Optional.empty());
-            return;
-        }
+        ColumnResolver columns = new ColumnResolver(tableNames, schemas);
         for (Predicate filter : select.filters()) {
-            bindWhere(tableName, Optional.of(filter));
+            requireConstantMatchesColumn(columns.resolve(filter.columnName()), filter);
+        }
+        for (JoinPredicate join : select.joins()) {
+            bindJoin(columns, join);
         }
     }
 
-    // SELECT and DELETE check the same things: the table exists, and a WHERE fits its schema.
-    private void bindWhere(String tableName, Optional<Predicate> where) {
-        List<ColumnSpec> schema = engine.schema(tableName);
+    // The table must exist, and a WHERE must fit its schema.
+    private void bindDelete(DeleteStatement delete) {
+        String tableName = delete.tableName();
+        ColumnResolver columns = new ColumnResolver(List.of(tableName), List.of(requireTable(tableName)));
         // Without a WHERE there is nothing to check beyond the table itself.
-        if (where.isEmpty()) {
+        if (delete.where().isEmpty()) {
             return;
         }
-        Predicate predicate = where.get();
-        ColumnSpec column = schema.stream()
-                .filter(candidate -> candidate.name().equals(predicate.columnName()))
-                .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "unknown column: " + predicate.columnName() + " on table " + tableName));
-        if (!column.type().accepts(predicate.constant())) {
-            throw new IllegalArgumentException(
-                    "constant type %s does not match column %s of type %s"
-                            .formatted(predicate.constant().getClass().getSimpleName(), column.name(), column.type()));
+        Predicate predicate = delete.where().get();
+        requireConstantMatchesColumn(columns.resolve(predicate.columnName()), predicate);
+    }
+
+    private List<ColumnSpec> requireTable(String tableName) {
+        try {
+            return engine.schema(tableName);
+        } catch (IllegalArgumentException failure) {
+            throw new IllegalArgumentException("unknown table: " + tableName, failure);
         }
+    }
+
+    private static void requireConstantMatchesColumn(ColumnResolver.ResolvedColumn column, Predicate predicate) {
+        if (column.column().type().accepts(predicate.constant())) {
+            return;
+        }
+        throw new IllegalArgumentException(
+                "constant type %s does not match column %s of type %s"
+                        .formatted(predicate.constant().getClass().getSimpleName(),
+                                column.column().name(), column.column().type()));
+    }
+
+    // Java equals never treats a LONG 3 as a DOUBLE 3.0, so a mismatched join would return no rows.
+    private static void bindJoin(ColumnResolver columns, JoinPredicate join) {
+        ColumnResolver.ResolvedColumn left = columns.resolve(join.leftColumn());
+        ColumnResolver.ResolvedColumn right = columns.resolve(join.rightColumn());
+        requireDifferentTables(join, left, right);
+        requireSameType(join, left, right);
+    }
+
+    private static void requireDifferentTables(JoinPredicate join, ColumnResolver.ResolvedColumn left,
+            ColumnResolver.ResolvedColumn right) {
+        if (!left.tableName().equals(right.tableName())) {
+            return;
+        }
+        throw new IllegalArgumentException(
+                "join columns %s and %s are both on table %s"
+                        .formatted(join.leftColumn(), join.rightColumn(), left.tableName()));
+    }
+
+    private static void requireSameType(JoinPredicate join, ColumnResolver.ResolvedColumn left,
+            ColumnResolver.ResolvedColumn right) {
+        if (left.column().type() == right.column().type()) {
+            return;
+        }
+        throw new IllegalArgumentException(
+                "join columns have different types: %s is %s, %s is %s"
+                        .formatted(join.leftColumn(), left.column().type(),
+                                join.rightColumn(), right.column().type()));
     }
 
     // Whether the table already exists is execution's concern: it checks and writes in one step.
