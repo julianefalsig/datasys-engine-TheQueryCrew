@@ -16,7 +16,6 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -139,7 +138,8 @@ class PlannerTest {
     // ---- Helpers --------------------------------------------------------------------------
 
     private static SelectStatement select(Predicate where) {
-        return new SelectStatement("trips", Optional.ofNullable(where));
+        List<Predicate> filters = where == null ? List.of() : List.of(where);
+        return new SelectStatement(List.of("trips"), filters, List.of());
     }
 
     private static void assertRows(Object[][] expected, List<Object[]> actual) {

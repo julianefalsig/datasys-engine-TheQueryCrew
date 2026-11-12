@@ -10,8 +10,6 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Optional;
-
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -35,15 +33,15 @@ class StorageEngineSmokeTest {
 
         List<Object[]> distanceOver100 = query(engine, "SELECT * FROM trips WHERE distance > 100;");
         assertEquals(4, distanceOver100.size());
-        var distancePlan = new Planner(engine).plan(new SelectStatement("trips",
-                Optional.of(new Predicate("distance", Comparison.GREATER_THAN, 100L))));
+        var distancePlan = new Planner(engine).plan(new SelectStatement(List.of("trips"),
+                List.of(new Predicate("distance", Comparison.GREATER_THAN, 100L)), List.of()));
         assertEquals(distancePlan.stats().partitionsTotal(),
                 distancePlan.stats().partitionsRead() + distancePlan.stats().partitionsPruned());
 
         // trips.csv isn't sorted by distance, so every 2-row partition mixes low/high distances and
         // none can be pruned on that column; city is where partitioning happens to produce a prunable range.
-        var cityPlan = new Planner(engine).plan(new SelectStatement("trips",
-                Optional.of(new Predicate("city", Comparison.EQUALS, "Aalborg"))));
+        var cityPlan = new Planner(engine).plan(new SelectStatement(List.of("trips"),
+                List.of(new Predicate("city", Comparison.EQUALS, "Aalborg")), List.of()));
         assertTrue(cityPlan.stats().partitionsPruned() > 0);
 
         assertEquals(3, query(engine, "SELECT * FROM trips WHERE city = 'Copenhagen';").size());
