@@ -4,7 +4,9 @@ import dk.itu.datasys.storage.ColumnSpec;
 import dk.itu.datasys.storage.StorageEngine;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 //Checks a parsed statement against the catalog
 
@@ -33,6 +35,7 @@ public final class Binder {
     // Each name must land on exactly one column of the FROM list. A join must pair two tables of one type.
     private void bindSelect(SelectStatement select) {
         List<String> tableNames = select.tableNames();
+        requireDistinctTables(tableNames);
         List<List<ColumnSpec>> schemas = new ArrayList<>(tableNames.size());
         for (String tableName : tableNames) {
             schemas.add(requireTable(tableName));
@@ -58,6 +61,16 @@ public final class Binder {
         requireConstantMatchesColumn(columns.resolve(predicate.columnName()), predicate);
     }
 
+    private static void requireDistinctTables(List<String> tableNames) {
+        Set<String> seen = new HashSet<>();
+        for (String tableName : tableNames) {
+            if (seen.add(tableName)) {
+                continue;
+            }
+            throw new IllegalArgumentException("table listed more than once: " + tableName);
+        }
+    }
+
     private List<ColumnSpec> requireTable(String tableName) {
         try {
             return engine.schema(tableName);
@@ -73,7 +86,7 @@ public final class Binder {
         throw new IllegalArgumentException(
                 "constant type %s does not match column %s of type %s"
                         .formatted(predicate.constant().getClass().getSimpleName(),
-                                column.column().name(), column.column().type()));
+                                column.tableName(), column.column().name(), column.column().type()));
     }
 
     // Java equals never treats a LONG 3 as a DOUBLE 3.0, so a mismatched join would return no rows.
@@ -100,9 +113,9 @@ public final class Binder {
             return;
         }
         throw new IllegalArgumentException(
-                "join columns have different types: %s is %s, %s is %s"
-                        .formatted(join.leftColumn(), left.column().type(),
-                                join.rightColumn(), right.column().type()));
+                "join columns have different types: %s.%s is %s, %s.%s is %s"
+                        .formatted(left.tableName(), join.leftColumn(), left.column().type(),
+                                right.tableName(), join.rightColumn(), right.column().type()));
     }
 
     // Whether the table already exists is execution's concern: it checks and writes in one step.

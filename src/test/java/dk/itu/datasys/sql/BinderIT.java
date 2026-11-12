@@ -165,9 +165,11 @@ class BinderIT {
     void aTypeMismatchedConstantThrows(@TempDir Path dataDir) {
         Binder binder = binderWithTrips(dataDir);
 
-        assertThrows(IllegalArgumentException.class,
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
                 () -> binder.bind(new SelectStatement(List.of("trips"),
                         List.of(new Predicate("distance", Comparison.EQUALS, "x")), List.of())));
+
+        assertEquals("constant type String does not match column trips.distance of type LONG", error.getMessage());
     }
 
     // No WHERE deletes every row; the table is the only thing there is to check.
@@ -238,7 +240,20 @@ class BinderIT {
                 () -> binder.bind(new SelectStatement(List.of("orders", "products"), List.of(),
                         List.of(new JoinPredicate("o_orderkey", "p_price")))));
 
-        assertEquals("join columns have different types: o_orderkey is LONG, p_price is DOUBLE", error.getMessage());
+        assertEquals(
+                "join columns have different types: orders.o_orderkey is LONG, products.p_price is DOUBLE",
+                error.getMessage());
+    }
+
+    // The same name twice would make every column ambiguous. Say so before resolving columns.
+    @Test
+    void aTableListedTwiceThrows(@TempDir Path dataDir) {
+        Binder binder = binderWithOrders(dataDir);
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> binder.bind(new SelectStatement(List.of("orders", "customers", "orders"), List.of(), List.of())));
+
+        assertEquals("table listed more than once: orders", error.getMessage());
     }
 
     // Both names resolve, but a join has to connect two tables.
