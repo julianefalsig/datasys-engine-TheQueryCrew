@@ -63,7 +63,7 @@ class ColumnResolverTest {
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
                 () -> resolver.resolve("missing"));
 
-        assertEquals("unknown column: missing", error.getMessage());
+        assertEquals("unknown column: missing in tables [orders, customers, products]", error.getMessage());
     }
 
     @Test
@@ -75,7 +75,7 @@ class ColumnResolverTest {
 
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () -> shared.resolve("id"));
 
-        assertEquals("ambiguous column: id", error.getMessage());
+        assertEquals("ambiguous column: id in tables [orders, customers]", error.getMessage());
         assertEquals(3, shared.resolve("c_name").rowIndex());
     }
 }

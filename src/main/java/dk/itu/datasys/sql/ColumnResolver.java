@@ -2,6 +2,7 @@ package dk.itu.datasys.sql;
 
 import dk.itu.datasys.storage.ColumnSpec;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -27,6 +28,7 @@ public final class ColumnResolver {
 
     public ResolvedColumn resolve(String columnName) {
         ResolvedColumn found = null;
+        List<String> foundIn = new ArrayList<>();
         int offset = 0;
         for (int table = 0; table < schemas.size(); table++) {
             List<ColumnSpec> schema = schemas.get(table);
@@ -34,15 +36,18 @@ public final class ColumnResolver {
                 if (!schema.get(column).name().equals(columnName)) {
                     continue;
                 }
-                if (found != null) {
-                    throw new IllegalArgumentException("ambiguous column: " + columnName);
+                foundIn.add(tableNames.get(table));
+                if (found == null) {
+                    found = new ResolvedColumn(tableNames.get(table), offset + column, schema.get(column));
                 }
-                found = new ResolvedColumn(tableNames.get(table), offset + column, schema.get(column));
             }
             offset += schema.size();
         }
+        if (foundIn.size() > 1) {
+            throw new IllegalArgumentException("ambiguous column: " + columnName + " in tables " + foundIn);
+        }
         if (found == null) {
-            throw new IllegalArgumentException("unknown column: " + columnName);
+            throw new IllegalArgumentException("unknown column: " + columnName + " in tables " + tableNames);
         }
         return found;
     }

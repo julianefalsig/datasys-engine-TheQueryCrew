@@ -228,7 +228,7 @@ class BinderIT {
                 () -> binder.bind(new SelectStatement(List.of("orders", "customers"),
                         List.of(new Predicate("id", Comparison.EQUALS, 1L)), List.of())));
 
-        assertEquals("ambiguous column: id", error.getMessage());
+        assertEquals("ambiguous column: id in tables [orders, customers]", error.getMessage());
     }
 
     // A LONG and a DOUBLE never compare equal under Java equals, so the join is rejected.
