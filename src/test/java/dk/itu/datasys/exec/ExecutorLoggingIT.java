@@ -89,7 +89,7 @@ class ExecutorLoggingIT {
             assertTrue(message.contains("planMs="), message);
             assertTrue(message.contains("executeMs="), message);
             assertTrue(message.contains("durationMs="), message);
-            assertTrue(message.contains("version=1"), message);
+            assertTrue(message.contains("versions=[1]"), message);
         }
 
         // Counted from 1, one number per statement, in order, with no gaps and no repeats.

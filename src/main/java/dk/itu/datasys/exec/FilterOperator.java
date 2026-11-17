@@ -20,6 +20,10 @@ public final class FilterOperator implements Operator {
         this.predicate = predicate;
     }
 
+    Operator child() {
+        return child;
+    }
+
     @Override
     public void open() {
         child.open();

@@ -37,6 +37,22 @@ public final class HashJoinOperator implements Operator {
         this.probeKey = probeKey;
     }
 
+    Operator buildSide() {
+        return build;
+    }
+
+    Operator probeSide() {
+        return probe;
+    }
+
+    int buildKey() {
+        return buildKey;
+    }
+
+    int probeKey() {
+        return probeKey;
+    }
+
     // The whole build side is drained here, before the first probe row is pulled.
     @Override
     public void open() {

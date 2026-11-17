@@ -121,9 +121,9 @@ public final class Executor {
         long executeStarted = System.nanoTime();
         List<Object[]> rows = plan.drain();
         LOGGER.debug(
-                "select_complete rowsOut={} parseMs={} bindMs={} planMs={} executeMs={} durationMs={} version={}",
+                "select_complete rowsOut={} parseMs={} bindMs={} planMs={} executeMs={} durationMs={} versions={}",
                 rows.size(), parseMs, bindMs, planMs, durationMs(executeStarted), durationMs(startedNanos),
-                plan.version());
+                plan.versions());
         return rows;
     }
 

@@ -6,10 +6,18 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * A planned SELECT: the operator tree to run, the prune/read stats that produced it,
- * and the catalog version whose partition list was copied when planning started.
+ * A planned SELECT: the operator tree, and one pinned catalog snapshot per FROM table.
+ * {@code stats} is the leftmost table. {@code tableStats} and {@code versions} follow the FROM list.
  */
-public record Plan(Operator root, ScanStats stats, int version) {
+public record Plan(Operator root, ScanStats stats, List<ScanStats> tableStats, List<Integer> versions) {
+
+    public Plan {
+        tableStats = List.copyOf(tableStats);
+        versions = List.copyOf(versions);
+        if (tableStats.isEmpty() || tableStats.size() != versions.size()) {
+            throw new IllegalArgumentException("a plan pins one catalog version and one ScanStats per table");
+        }
+    }
 
     // Drain the plan => execute it and return the rows.
     // Opens the root, pulls every row, then closes.
