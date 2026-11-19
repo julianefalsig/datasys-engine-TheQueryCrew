@@ -63,12 +63,12 @@ Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
 | `src/main/java/dk/itu/datasys/storage/ColumnSpec.java` | One schema column (name + type). Also stored in the catalog JSON. |
 | `src/main/java/dk/itu/datasys/storage/Comparison.java` | Predicate ops: `EQUALS`, `LESS_THAN`, `GREATER_THAN`, and the row test `matches(value, constant, type)`. |
 | `src/main/java/dk/itu/datasys/storage/ScanStats.java` | How many partitions a planned SELECT saw, read, and pruned. |
-| `src/main/java/dk/itu/datasys/storage/CatalogData.java` | In-memory / JSON catalog: schema, `version`, `maxPartitionNumber`, `maxRowsPerPartition`, partitions and typed min/max. |
+| `src/main/java/dk/itu/datasys/storage/CatalogData.java` | In-memory / JSON catalog: schema, `version`, `maxPartitionNumber`, `maxRowsPerPartition`, partitions, and per-column min/max plus NDV. |
 | `src/main/java/dk/itu/datasys/storage/CatalogStore.java` | Reads and writes `catalog.json` under each table directory. |
 | `src/main/java/dk/itu/datasys/storage/PartitionFile.java` | Binary layout of one partition file (magic, version, offset table, column chunks). Only `readAllColumns` is open outside the package; `COPY` and `DELETE` write the files, so every file has a catalog entry. |
 | `src/main/java/dk/itu/datasys/storage/ValueCodec.java` | Encode/decode one `LONG` / `DOUBLE` / `STRING` value (little-endian). |
 | `src/main/java/dk/itu/datasys/storage/CsvParser.java` | Headerless positional CSV line → typed `Object[]`. |
-| `src/main/java/dk/itu/datasys/storage/ColumnStats.java` | Min/max over a column and the comparator used for that type. |
+| `src/main/java/dk/itu/datasys/storage/ColumnStats.java` | Min, max, and distinct count over a column, and the comparator used for that type. `tableNdv` is the max of the partition counts. |
 | `src/main/java/dk/itu/datasys/storage/Pruner.java` | Whether a partition’s `[min, max]` can contain a match. |
 
 ### Tests
@@ -80,7 +80,7 @@ Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
 | `src/test/java/dk/itu/datasys/SqlParserTest.java` | Parser unit tests: statement shapes, literals, case, malformed line/col, comments. |
 | `src/test/java/dk/itu/datasys/JoinTestbedIT.java` | Exercise 10 testbed: each query in `examples/21-query-multiple.sql` through `-f`, sorted output equals DuckDB's (JDBC, test scope). |
 | `src/test/java/dk/itu/datasys/storage/ValueCodecTest.java` | Encode/decode round trip per column type. |
-| `src/test/java/dk/itu/datasys/storage/ColumnStatsTest.java` | Min/max over a column. |
+| `src/test/java/dk/itu/datasys/storage/ColumnStatsTest.java` | Min, max, and distinct count over a column; `tableNdv` is the largest partition count. |
 | `src/test/java/dk/itu/datasys/storage/PrunerTest.java` | Partition prune-or-read decisions. |
 | `src/test/java/dk/itu/datasys/storage/CsvParserTest.java` | Headerless CSV line parsing. |
 | `src/test/java/dk/itu/datasys/storage/StorageEngineSmokeTest.java` | End-to-end smoke test on the golden `trips.csv` data. |
