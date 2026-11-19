@@ -1,5 +1,6 @@
 package dk.itu.datasys.storage;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 
@@ -14,7 +15,10 @@ import java.nio.file.StandardCopyOption;
 final class CatalogStore {
 
     private static final String CATALOG_FILE_NAME = "catalog.json";
-    private static final ObjectMapper MAPPER = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
+    // A later catalog may add keys such as ndv beside min and max. Reading ignores them.
+    private static final ObjectMapper MAPPER = new ObjectMapper()
+            .enable(SerializationFeature.INDENT_OUTPUT)
+            .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
 
     private CatalogStore() {
     }
