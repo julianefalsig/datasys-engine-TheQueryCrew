@@ -47,9 +47,9 @@ Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
 | `src/main/java/dk/itu/datasys/exec/ScanOperator.java` | Reads the partitions it is handed, in order. Sees no predicate and prunes nothing. |
 | `src/main/java/dk/itu/datasys/exec/FilterOperator.java` | Passes on the rows its predicate accepts; logs `rowsIn`/`rowsOut` on close. |
 | `src/main/java/dk/itu/datasys/exec/HashJoinOperator.java` | Inner equi-join: hashes the build child on `open()`, streams the probe child; each output row is build columns then probe columns. Logs `rowsBuild`/`rowsProbe`/`rowsOut` on close. |
-| `src/main/java/dk/itu/datasys/exec/Plan.java` | Planned SELECT: operator root, `ScanStats`, and the catalog version pinned at plan time; `drain()` pulls all rows. |
-| `src/main/java/dk/itu/datasys/exec/Planner.java` | Bound SELECT → plan; prunes partitions and emits `decision=READ\|PRUNED` log lines (including `reason=noPredicate` when there is no WHERE). |
-| `src/main/java/dk/itu/datasys/exec/Executor.java` | `parse → bind → plan → execute` per statement; CREATE/COPY/DELETE call storage directly. Counts `statementNumber` into the MDC from 1, back to 0 when the script ends. Logs `create_complete`, `copy_complete`, `delete_complete`, and `select_complete` on success (parse/bind/execute timings and `version=`; SELECT also logs plan) and `statement_failed` on bind/operator errors. |
+| `src/main/java/dk/itu/datasys/exec/Plan.java` | Planned SELECT: operator root, one `ScanStats` and one pinned catalog version per FROM table (`versions` follows the FROM list; `stats` is the leftmost table); `drain()` pulls all rows. |
+| `src/main/java/dk/itu/datasys/exec/Planner.java` | Bound SELECT → plan. One scan per table, pruned on that table's filters, then left-deep hash joins in `FROM` order (build = joined so far, probe = the next table). A table with no connecting predicate is rejected; the message asks to reorder the `FROM` list. A second equi-join predicate on the same added table is rejected too. |
+| `src/main/java/dk/itu/datasys/exec/Executor.java` | `parse → bind → plan → execute` per statement; CREATE/COPY/DELETE call storage directly. Counts `statementNumber` into the MDC from 1, back to 0 when the script ends. Logs `create_complete`, `copy_complete`, `delete_complete`, and `select_complete` on success (parse/bind/execute timings; CREATE/COPY/DELETE log `version=`, SELECT logs `versions=` for every pinned table) and `statement_failed` on bind/operator errors. |
 
 ### `dk.itu.datasys.storage`
 
@@ -92,7 +92,7 @@ Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
 | `src/test/java/dk/itu/datasys/exec/FilterOperatorTest.java` | Filter over a stub child, including lexicographic `STRING` order and exhaustion. |
 | `src/test/java/dk/itu/datasys/exec/HashJoinOperatorTest.java` | Hash join over stub children: duplicates multiply, unmatched rows drop, empty build and probe sides. |
 | `src/test/java/dk/itu/datasys/exec/ScanOperatorTest.java` | Scan over real partition files, including the fully pruned empty-partition case. |
-| `src/test/java/dk/itu/datasys/exec/PlannerTest.java` | Planner shapes (Filter/Scan) and pruning `ScanStats` on sorted golden data. |
+| `src/test/java/dk/itu/datasys/exec/PlannerTest.java` | Planner shapes (Filter/Scan, left-deep hash joins) and per-table pruning `ScanStats`. An unconnected `FROM` list and a second equi-join predicate are rejected. |
 | `src/test/java/dk/itu/datasys/exec/TestListOperator.java` | Test helper: a stub child operator serving rows from a list. |
 | `src/test/java/dk/itu/datasys/storage/TestPartitions.java` | Test helper: writes a partition file for tests outside the storage package. |
 
@@ -113,11 +113,13 @@ flowchart TD
     SelectStatement
     Predicate
     JoinPredicate
+    ColumnResolver
   end
   subgraph execPkg ["dk.itu.datasys.exec"]
     Operator
     ScanOperator
     FilterOperator
+    HashJoinOperator
     Plan
     Planner
     Executor
@@ -176,6 +178,7 @@ flowchart TD
   ColumnStats --> ColumnType
   ScanOperator --> Operator
   FilterOperator --> Operator
+  HashJoinOperator --> Operator
   FilterOperator --> RowPredicate
   RowPredicate --> Comparison
   RowPredicate --> ColumnType
@@ -184,12 +187,14 @@ flowchart TD
   Plan --> Operator
   Plan --> ScanStats
   Planner --> Plan
+  Planner --> HashJoinOperator
   Planner --> ScanOperator
   Planner --> FilterOperator
   Planner --> RowPredicate
   Planner --> Pruner
   Planner --> StorageEngine
   Planner --> SelectStatement
+  Planner --> ColumnResolver
   Executor --> SqlParser
   Executor --> Binder
   Executor --> Planner

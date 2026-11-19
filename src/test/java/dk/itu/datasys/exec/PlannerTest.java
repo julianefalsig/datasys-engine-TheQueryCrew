@@ -1,5 +1,6 @@
 package dk.itu.datasys.exec;
 
+import dk.itu.datasys.sql.JoinPredicate;
 import dk.itu.datasys.sql.Predicate;
 import dk.itu.datasys.sql.SelectStatement;
 import dk.itu.datasys.storage.ColumnSpec;
@@ -20,6 +21,8 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The golden data is sorted by distance and loaded with maxRowsPerPartition = 2, so the catalog
@@ -135,6 +138,92 @@ class PlannerTest {
         }, plan.drain());
     }
 
+    // ---- Joins ----------------------------------------------------------------------------
+
+    // orders | customers | products | cities, filters on the first two scans, then three hash joins.
+    @Test
+    void aFourTableQueryIsLeftDeepWithFiltersBelowTheJoins(@TempDir Path dataDir) throws IOException {
+        Planner planner = new Planner(engineWithJoinTables(dataDir));
+
+        Plan plan = planner.plan(new SelectStatement(
+                List.of("orders", "customers", "products", "cities"),
+                List.of(new Predicate("o_quantity", Comparison.EQUALS, 1L),
+                        new Predicate("c_city", Comparison.EQUALS, "Copenhagen")),
+                List.of(new JoinPredicate("o_custname", "c_name"),
+                        new JoinPredicate("o_prodname", "p_name"),
+                        new JoinPredicate("c_city", "ct_city"))));
+
+        HashJoinOperator cities = assertInstanceOf(HashJoinOperator.class, plan.root());
+        HashJoinOperator products = assertInstanceOf(HashJoinOperator.class, cities.buildSide());
+        HashJoinOperator customers = assertInstanceOf(HashJoinOperator.class, products.buildSide());
+        assertEquals(1, customers.buildKey());
+        assertEquals(0, customers.probeKey());
+        assertEquals(2, products.buildKey());
+        assertEquals(0, products.probeKey());
+        assertEquals(5, cities.buildKey());
+        assertEquals(0, cities.probeKey());
+
+        FilterOperator ordersFilter = assertInstanceOf(FilterOperator.class, customers.buildSide());
+        assertInstanceOf(ScanOperator.class, ordersFilter.child());
+        FilterOperator customersFilter = assertInstanceOf(FilterOperator.class, customers.probeSide());
+        assertInstanceOf(ScanOperator.class, customersFilter.child());
+        assertInstanceOf(ScanOperator.class, products.probeSide());
+        assertInstanceOf(ScanOperator.class, cities.probeSide());
+
+        // Quantity 1 misses the 5–9 partition; Copenhagen misses the Aarhus–Aarhus partition.
+        assertEquals(List.of(
+                new ScanStats(2, 1, 1),
+                new ScanStats(2, 1, 1),
+                new ScanStats(1, 1, 0),
+                new ScanStats(1, 1, 0)), plan.tableStats());
+        assertEquals(plan.tableStats().getFirst(), plan.stats());
+        assertEquals(List.of(1, 1, 1, 1), plan.versions());
+        assertRows(new Object[][] {
+                {100L, "Anna", "Bike", 1L, "Anna", "Copenhagen", "Bike", 2999.0, "Copenhagen", "Denmark", 1400000L}
+        }, plan.drain());
+    }
+
+    // The probe column may be written on the left of the predicate; the build side is still orders.
+    @Test
+    void theJoinKeyFollowsTheTableNotThePredicateOrder(@TempDir Path dataDir) throws IOException {
+        Planner planner = new Planner(engineWithJoinTables(dataDir));
+
+        Plan plan = planner.plan(new SelectStatement(
+                List.of("orders", "customers"),
+                List.of(),
+                List.of(new JoinPredicate("c_name", "o_custname"))));
+
+        HashJoinOperator join = assertInstanceOf(HashJoinOperator.class, plan.root());
+        assertInstanceOf(ScanOperator.class, join.buildSide());
+        assertInstanceOf(ScanOperator.class, join.probeSide());
+        assertEquals(1, join.buildKey());
+        assertEquals(0, join.probeKey());
+    }
+
+    @Test
+    void anUnconnectedTableIsRejected(@TempDir Path dataDir) throws IOException {
+        Planner planner = new Planner(engineWithJoinTables(dataDir));
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () -> planner.plan(
+                new SelectStatement(List.of("orders", "products", "customers"), List.of(),
+                        List.of(new JoinPredicate("o_custname", "c_name")))));
+
+        assertTrue(error.getMessage().contains("products"), error.getMessage());
+        assertTrue(error.getMessage().contains("reorder"), error.getMessage());
+    }
+
+    @Test
+    void aSecondConnectingPredicateIsRejected(@TempDir Path dataDir) throws IOException {
+        Planner planner = new Planner(engineWithJoinTables(dataDir));
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () -> planner.plan(
+                new SelectStatement(List.of("orders", "customers"), List.of(),
+                        List.of(new JoinPredicate("o_custname", "c_name"),
+                                new JoinPredicate("o_prodname", "c_city")))));
+
+        assertTrue(error.getMessage().contains("one equi-join predicate"), error.getMessage());
+    }
+
     // ---- Helpers --------------------------------------------------------------------------
 
     private static SelectStatement select(Predicate where) {
@@ -147,6 +236,52 @@ class PlannerTest {
         for (int i = 0; i < expected.length; i++) {
             assertArrayEquals(expected[i], actual.get(i));
         }
+    }
+
+    private static StorageEngine engineWithJoinTables(Path dataDir) throws IOException {
+        StorageEngine engine = new StorageEngine(dataDir, 2);
+        engine.createTable("orders", List.of(
+                new ColumnSpec("o_orderkey", ColumnType.LONG),
+                new ColumnSpec("o_custname", ColumnType.STRING),
+                new ColumnSpec("o_prodname", ColumnType.STRING),
+                new ColumnSpec("o_quantity", ColumnType.LONG)));
+        engine.createTable("products", List.of(
+                new ColumnSpec("p_name", ColumnType.STRING),
+                new ColumnSpec("p_price", ColumnType.DOUBLE)));
+        engine.createTable("customers", List.of(
+                new ColumnSpec("c_name", ColumnType.STRING),
+                new ColumnSpec("c_city", ColumnType.STRING)));
+        engine.createTable("cities", List.of(
+                new ColumnSpec("ct_city", ColumnType.STRING),
+                new ColumnSpec("ct_country", ColumnType.STRING),
+                new ColumnSpec("ct_population", ColumnType.LONG)));
+        engine.copyFile("orders", writeCsv(dataDir, "orders.csv", """
+                100,Anna,Bike,1
+                101,Bob,Helmet,1
+                102,Carol,Bike,5
+                103,Anna,Helmet,9
+                """).toString());
+        engine.copyFile("customers", writeCsv(dataDir, "customers.csv", """
+                Anna,Copenhagen
+                Eve,Copenhagen
+                Bob,Aarhus
+                Dave,Aarhus
+                """).toString());
+        engine.copyFile("products", writeCsv(dataDir, "products.csv", """
+                Bike,2999.0
+                Helmet,299.0
+                """).toString());
+        engine.copyFile("cities", writeCsv(dataDir, "cities.csv", """
+                Copenhagen,Denmark,1400000
+                Aarhus,Denmark,290000
+                """).toString());
+        return engine;
+    }
+
+    private static Path writeCsv(Path dataDir, String name, String csv) throws IOException {
+        Path dest = dataDir.resolve(name);
+        Files.writeString(dest, csv);
+        return dest;
     }
 
     private static StorageEngine engineWithSortedTrips(Path dataDir) throws IOException {

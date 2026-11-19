@@ -89,11 +89,26 @@ class ExecutorLoggingIT {
             assertTrue(message.contains("planMs="), message);
             assertTrue(message.contains("executeMs="), message);
             assertTrue(message.contains("durationMs="), message);
-            assertTrue(message.contains("version=1"), message);
+            assertTrue(message.contains("versions=[1]"), message);
         }
 
         // Counted from 1, one number per statement, in order, with no gaps and no repeats.
         assertEquals(List.of("0", "1", "2", "3", "4"), numbersInOrderOfFirstAppearance());
+    }
+
+    // A version per table. Commas would split the CSV log, so csvSafe turns them into semicolons.
+    @Test
+    void versionsForSeveralTablesStayOneCsvField(@TempDir Path dataDir) throws IOException {
+        Executor executor = new Executor(new StorageEngine(dataDir));
+
+        executor.execute("""
+                CREATE TABLE orders (o_custname STRING);
+                CREATE TABLE customers (c_name STRING);
+                SELECT * FROM orders, customers WHERE o_custname = c_name;
+                """);
+
+        String message = onlyLineContaining("select_complete")[6];
+        assertTrue(message.contains("versions=[0; 0]"), message);
     }
 
     /**

@@ -24,3 +24,19 @@ package-private means only `copyFile` creates partitions.
 **What it cost.** `PartitionFile`, `Pruner`, and `CatalogData` are public. Tests outside `storage`
 go through the test-only helper `TestPartitions`. `catalog` returns the live object; callers must
 not mutate it.
+
+---
+
+## One equi-join predicate per added table
+
+**Decision.** The planner joins in `FROM`-list order. Each new table must have exactly one
+equi-join predicate that reaches a table already in the chain. Zero predicates is a cross
+product: the error tells the caller to reorder the `FROM` list. Two or more are rejected as
+well, rather than applied as a filter on the join output.
+
+**Why.** `HashJoinOperator` takes one build key and one probe key. A second predicate between
+the same pair of tables would need another operator, and week 11 is the point where join
+order becomes a choice. Rejecting it keeps this week's plan a straight left-deep chain.
+
+**What it cost.** `SELECT * FROM orders, customers WHERE o_custname = c_name AND o_prodname = c_city`
+does not run. The same query with the tables ordered so each one joins the prefix does.
