@@ -111,7 +111,7 @@ public final class Planner {
             for (int p = 0; p < partitions.size(); p++) {
                 CatalogData.Partition partition = partitions.get(p);
                 allPartitions.add(tableDir.resolve(partition.dataFile()));
-                LOGGER.debug("partition={} decision=READ reason=noPredicate", p);
+                LOGGER.debug("table={} partition={} decision=READ reason=noPredicate", csvSafe(tableName), p);
             }
             int total = partitions.size();
             ScanStats stats = new ScanStats(total, total, 0);
