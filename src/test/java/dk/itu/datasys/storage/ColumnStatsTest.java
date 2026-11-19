@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ColumnStatsTest {
 
@@ -13,6 +14,7 @@ class ColumnStatsTest {
         ColumnStats stats = ColumnStats.of(List.of(12L, 187L, 95L, 31L), ColumnType.LONG);
         assertEquals(12L, stats.min);
         assertEquals(187L, stats.max);
+        assertEquals(4L, stats.ndv);
     }
 
     @Test
@@ -62,5 +64,21 @@ class ColumnStatsTest {
         ColumnStats stats = ColumnStats.of(List.of(-3.5, 0.0, -12.0, 4.25), ColumnType.DOUBLE);
         assertEquals(-12.0, stats.min);
         assertEquals(4.25, stats.max);
+    }
+
+    @Test
+    void repeatedValuesCountOnce() {
+        ColumnStats stats = ColumnStats.of(List.of("Anna", "Anna", "Bob"), ColumnType.STRING);
+        assertEquals(2L, stats.ndv);
+    }
+
+    @Test
+    void tableNdvIsTheLargestPartitionCount() {
+        assertEquals(5L, ColumnStats.tableNdv(List.of(2L, 5L, 3L)));
+    }
+
+    @Test
+    void tableNdvRejectsAnEmptyList() {
+        assertThrows(IllegalArgumentException.class, () -> ColumnStats.tableNdv(List.of()));
     }
 }
