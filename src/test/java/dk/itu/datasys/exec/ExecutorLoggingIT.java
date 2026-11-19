@@ -96,6 +96,21 @@ class ExecutorLoggingIT {
         assertEquals(List.of("0", "1", "2", "3", "4"), numbersInOrderOfFirstAppearance());
     }
 
+    // A version per table. Commas would split the CSV log, so csvSafe turns them into semicolons.
+    @Test
+    void versionsForSeveralTablesStayOneCsvField(@TempDir Path dataDir) throws IOException {
+        Executor executor = new Executor(new StorageEngine(dataDir));
+
+        executor.execute("""
+                CREATE TABLE orders (o_custname STRING);
+                CREATE TABLE customers (c_name STRING);
+                SELECT * FROM orders, customers WHERE o_custname = c_name;
+                """);
+
+        String message = onlyLineContaining("select_complete")[6];
+        assertTrue(message.contains("versions=[0; 0]"), message);
+    }
+
     /**
      * The failing half: the error belongs to the statement that caused it, and the count still ends
      * at 0 so the engine's own stop line falls outside it.

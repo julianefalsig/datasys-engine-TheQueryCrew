@@ -123,7 +123,7 @@ public final class Executor {
         LOGGER.debug(
                 "select_complete rowsOut={} parseMs={} bindMs={} planMs={} executeMs={} durationMs={} versions={}",
                 rows.size(), parseMs, bindMs, planMs, durationMs(executeStarted), durationMs(startedNanos),
-                plan.versions());
+                csvSafe(plan.versions()));
         return rows;
     }
 
