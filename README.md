@@ -78,6 +78,7 @@ Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
 | `src/test/java/dk/itu/datasys/EngineTest.java` | Unit test for the team-name helper. |
 | `src/test/java/dk/itu/datasys/EngineFrontDoorIT.java` | Front door: script → headerless CSV on stdout; failing script → stderr only. |
 | `src/test/java/dk/itu/datasys/SqlParserTest.java` | Parser unit tests: statement shapes, literals, case, malformed line/col, comments. |
+| `src/test/java/dk/itu/datasys/JoinTestbedIT.java` | Exercise 10 testbed: each query in `examples/21-query-multiple.sql` through `-f`, sorted output equals DuckDB's (JDBC, test scope). |
 | `src/test/java/dk/itu/datasys/storage/ValueCodecTest.java` | Encode/decode round trip per column type. |
 | `src/test/java/dk/itu/datasys/storage/ColumnStatsTest.java` | Min/max over a column. |
 | `src/test/java/dk/itu/datasys/storage/PrunerTest.java` | Partition prune-or-read decisions. |
