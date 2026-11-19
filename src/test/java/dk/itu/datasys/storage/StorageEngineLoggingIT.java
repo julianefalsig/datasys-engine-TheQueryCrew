@@ -78,6 +78,9 @@ class StorageEngineLoggingIT {
                 + "const=100"));
         assertEquals(1, countMessagesContaining(
                 "op=select table=trips partitionsTotal=4 partitionsRead=4 partitionsPruned=0 version=1"));
+        assertEquals(List.of(
+                "op=copyFile table=trips partition=0 column=city min=Aarhus max=Copenhagen rows=2 ndv=2"),
+                messagesContaining("op=copyFile table=trips partition=0 column=city "));
     }
 
     @Test
@@ -108,6 +111,16 @@ class StorageEngineLoggingIT {
             }
         }
         return mine;
+    }
+
+    private List<String> messagesContaining(String needle) throws IOException {
+        List<String> messages = new ArrayList<>();
+        for (String[] fields : myLogLines()) {
+            if (fields.length == 7 && fields[6].contains(needle)) {
+                messages.add(fields[6]);
+            }
+        }
+        return messages;
     }
 
     private int countMessagesContaining(String needle) throws IOException {

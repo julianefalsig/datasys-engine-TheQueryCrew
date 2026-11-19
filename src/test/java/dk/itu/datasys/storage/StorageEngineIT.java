@@ -152,6 +152,31 @@ class StorageEngineIT {
         assertRange(catalog.partitions.get(3), "city", "Copenhagen", "Esbjerg");
         assertRange(catalog.partitions.get(3), "distance", 88L, 299L);
         assertRange(catalog.partitions.get(3), "price", 99.99, 450.25);
+
+        for (CatalogData.Partition partition : catalog.partitions) {
+            for (String column : List.of("city", "distance", "price")) {
+                assertEquals(2L, partition.stats().get(column).ndv());
+            }
+        }
+    }
+
+    @Test
+    void copyCountsDistinctStringsAndLongs(@TempDir Path dataDir) throws IOException {
+        StorageEngine engine = new StorageEngine(dataDir, 10);
+        engine.createTable("orders", List.of(
+                new ColumnSpec("o_custname", ColumnType.STRING),
+                new ColumnSpec("o_quantity", ColumnType.LONG)));
+        Path csv = dataDir.resolve("orders.csv");
+        Files.writeString(csv, """
+                Anna,1
+                Anna,2
+                Bob,1
+                """);
+        engine.copyFile("orders", csv.toString());
+
+        CatalogData.Partition partition = CatalogStore.read(engine.tableDirectory("orders")).partitions.getFirst();
+        assertEquals(2L, partition.stats().get("o_custname").ndv());
+        assertEquals(2L, partition.stats().get("o_quantity").ndv());
     }
 
     @Test
