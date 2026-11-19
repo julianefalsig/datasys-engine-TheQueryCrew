@@ -86,7 +86,7 @@ class JoinTestbedIT {
         try (Connection duckdb = DriverManager.getConnection("jdbc:duckdb:");
                 java.sql.Statement statement = duckdb.createStatement()) {
             for (String load : statements(LOAD)) {
-                statement.execute(load);
+                statement.execute(headerless(load));
             }
             List<String> lines = new ArrayList<>();
             try (ResultSet rows = statement.executeQuery(query)) {
@@ -104,6 +104,18 @@ class JoinTestbedIT {
             }
             return lines.stream().sorted().toList();
         }
+    }
+
+    /**
+     * DuckDB's CSV sniffer reads the first line of an all-STRING file as a header, so
+     * {@code customers.csv} would lose Anna (the lecture 2 divergence). Our CSVs never have a header,
+     * so the oracle is told so; the script the engine runs is unchanged.
+     */
+    private static String headerless(String statement) {
+        if (!statement.toUpperCase().startsWith("COPY")) {
+            return statement;
+        }
+        return statement.substring(0, statement.length() - 1) + " (HEADER false);";
     }
 
     /** The statements of a script. The testbed has no semicolons inside string literals. */
