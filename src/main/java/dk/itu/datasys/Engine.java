@@ -1,6 +1,7 @@
 package dk.itu.datasys;
 
 import dk.itu.datasys.exec.Executor;
+import dk.itu.datasys.exec.JoinMode;
 import dk.itu.datasys.storage.StorageEngine;
 
 import java.io.IOException;
@@ -8,7 +9,7 @@ import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -39,13 +40,25 @@ public final class Engine {
 
         final String sql;
         Integer maxRows = null;
+        JoinMode joinMode = JoinMode.OPTIMIZED;
         try {
             int end = args.length;
             if (args.length >= 2 && "--max-rows-per-partition".equals(args[end - 2])) {
                 maxRows = partitionSize(args[end - 1]);
                 end -= 2;
             }
-            sql = resolveSql(Arrays.copyOfRange(args, 0, end));
+            List<String> sqlArgs = new ArrayList<>();
+            for (int i = 0; i < end; i++) {
+                if ("-j".equals(args[i])) {
+                    if (i + 1 >= end) {
+                        throw new IllegalArgumentException("-j needs optimized or syntax");
+                    }
+                    joinMode = JoinMode.parse(args[++i]);
+                } else {
+                    sqlArgs.add(args[i]);
+                }
+            }
+            sql = resolveSql(sqlArgs.toArray(String[]::new));
         } catch (IllegalArgumentException e) {
             err.println(e.getMessage());
             printUsage(err);
@@ -61,7 +74,7 @@ public final class Engine {
         try (StorageEngine engine = maxRows == null
                 ? new StorageEngine(dataDir)
                 : new StorageEngine(dataDir, maxRows)) {
-            Executor executor = new Executor(engine);
+            Executor executor = new Executor(engine, joinMode);
             writeCsv(executor.execute(sql), out);
             return 0;
         } catch (RuntimeException e) {
@@ -118,6 +131,7 @@ public final class Engine {
         dest.println("  (no args)              print this help");
         dest.println("  -c <sql>               execute one SQL statement or script");
         dest.println("  -f <path.sql>          execute a SQL file");
+        dest.println("  -j optimized|syntax    join order: smallest estimate (default), or the FROM list");
         dest.println("  --max-rows-per-partition <n>");
         dest.println("                         comes last; partition size stored by CREATE TABLE (default 10000)");
         dest.println("Data directory defaults to ./data/");
