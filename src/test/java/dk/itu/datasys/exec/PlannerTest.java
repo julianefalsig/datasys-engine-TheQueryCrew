@@ -151,7 +151,7 @@ class PlannerTest {
                         new Predicate("c_city", Comparison.EQUALS, "Copenhagen")),
                 List.of(new JoinPredicate("o_custname", "c_name"),
                         new JoinPredicate("o_prodname", "p_name"),
-                        new JoinPredicate("c_city", "ct_city"))));
+                        new JoinPredicate("c_city", "ct_city"))), JoinMode.SYNTAX);
 
         HashJoinOperator cities = assertInstanceOf(HashJoinOperator.class, plan.root());
         HashJoinOperator products = assertInstanceOf(HashJoinOperator.class, cities.buildSide());
@@ -191,7 +191,7 @@ class PlannerTest {
         Plan plan = planner.plan(new SelectStatement(
                 List.of("orders", "customers"),
                 List.of(),
-                List.of(new JoinPredicate("c_name", "o_custname"))));
+                List.of(new JoinPredicate("c_name", "o_custname"))), JoinMode.SYNTAX);
 
         HashJoinOperator join = assertInstanceOf(HashJoinOperator.class, plan.root());
         assertInstanceOf(ScanOperator.class, join.buildSide());
