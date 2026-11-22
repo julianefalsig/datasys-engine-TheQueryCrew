@@ -18,7 +18,7 @@ Equality filter col = x :
 |R| / ndv(col) 
 
 Range filter col\<x, col>c :
-|R| / interpolate from min/max
+|R| times the fraction of [min, max] on the matching side. A string has no distance to interpolate, so a range that does not already cover every value keeps Selinger's 1/3.
 
 Equivalence join:
 |R| · |S| / max(ndv(R.a), ndv(S.b))
