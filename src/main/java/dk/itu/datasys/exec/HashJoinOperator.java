@@ -17,6 +17,9 @@ public final class HashJoinOperator implements Operator {
     private final Operator probe;
     private final int buildKey;
     private final int probeKey;
+    private final int joinNumber;
+    private final String tables;
+    private final Double estRows;
 
     // A key maps to a list, because the build side can hold the same key more than once.
     private final Map<Object, List<Object[]>> table = new HashMap<>();
@@ -31,10 +34,18 @@ public final class HashJoinOperator implements Operator {
     private int rowsOut;
 
     HashJoinOperator(Operator build, Operator probe, int buildKey, int probeKey) {
+        this(build, probe, buildKey, probeKey, 0, null, null);
+    }
+
+    HashJoinOperator(Operator build, Operator probe, int buildKey, int probeKey,
+            int joinNumber, String tables, Double estRows) {
         this.build = build;
         this.probe = probe;
         this.buildKey = buildKey;
         this.probeKey = probeKey;
+        this.joinNumber = joinNumber;
+        this.tables = tables;
+        this.estRows = estRows;
     }
 
     Operator buildSide() {
@@ -84,9 +95,25 @@ public final class HashJoinOperator implements Operator {
 
     @Override
     public void close() {
-        LOGGER.debug("op=hashJoin rowsBuild={} rowsProbe={} rowsOut={}", rowsBuild, rowsProbe, rowsOut);
+        if (tables == null) {
+            LOGGER.debug("op=hashJoin rowsBuild={} rowsProbe={} rowsOut={}", rowsBuild, rowsProbe, rowsOut);
+        } else {
+            LOGGER.debug("op=hashJoin join={} tables={} estRows={} rowsBuild={} rowsProbe={} rowsOut={}",
+                    joinNumber, csvSafe(tables), formatRows(estRows), rowsBuild, rowsProbe, rowsOut);
+        }
         build.close();
         probe.close();
+    }
+
+    private static String formatRows(double rows) {
+        if (Double.isFinite(rows) && rows == Math.rint(rows)) {
+            return Long.toString((long) rows);
+        }
+        return Double.toString(rows);
+    }
+
+    private static String csvSafe(String value) {
+        return value.replace(',', ';').replaceAll("\\s+", " ");
     }
 
     // The build row's columns, then the probe row's.
