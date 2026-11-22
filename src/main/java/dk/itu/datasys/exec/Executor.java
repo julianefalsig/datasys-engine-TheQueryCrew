@@ -34,12 +34,18 @@ public final class Executor {
     private final SqlParser parser;
     private final Binder binder;
     private final Planner planner;
+    private final JoinMode joinMode;
 
     public Executor(StorageEngine engine) {
+        this(engine, JoinMode.OPTIMIZED);
+    }
+
+    public Executor(StorageEngine engine, JoinMode joinMode) {
         this.engine = engine;
         this.parser = new SqlParser();
         this.binder = new Binder(engine);
         this.planner = new Planner(engine);
+        this.joinMode = joinMode;
     }
 
     /**
@@ -116,7 +122,7 @@ public final class Executor {
 
     private List<Object[]> executeSelect(SelectStatement select, long parseMs, long bindMs, long startedNanos) {
         long planStarted = System.nanoTime();
-        Plan plan = planner.plan(select);
+        Plan plan = planner.plan(select, joinMode);
         long planMs = durationMs(planStarted);
         long executeStarted = System.nanoTime();
         List<Object[]> rows = plan.drain();

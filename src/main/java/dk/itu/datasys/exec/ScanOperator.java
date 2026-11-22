@@ -25,6 +25,10 @@ public final class ScanOperator implements Operator {
     private int rowIndex;
     private int rowsOut;
 
+    String tableName() {
+        return tableName;
+    }
+
     public ScanOperator(String tableName, List<ColumnSpec> columns, List<Path> partitionFiles) {
         this.tableName = tableName;
         this.columns = List.copyOf(columns);
