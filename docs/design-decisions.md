@@ -29,10 +29,11 @@ not mutate it.
 
 ## One equi-join predicate per added table
 
-**Decision.** The planner joins in `FROM`-list order. Each new table must have exactly one
-equi-join predicate that reaches a table already in the chain. Zero predicates is a cross
-product: the error tells the caller to reorder the `FROM` list. Two or more are rejected as
-well, rather than applied as a filter on the join output.
+**Decision.** Each new table must have exactly one equi-join predicate that reaches a table
+already in the chain. Zero predicates is a cross product. Under `-j syntax` the error tells the
+caller to reorder the `FROM` list, because a different order may connect each new table. Under
+`-j optimized` the predicate is missing, and reordering cannot invent it. Two or more predicates
+are rejected as well, rather than applied as a filter on the join output.
 
 **Why.** `HashJoinOperator` takes one build key and one probe key. A second predicate between
 the same pair of tables would need another operator, and week 11 is the point where join

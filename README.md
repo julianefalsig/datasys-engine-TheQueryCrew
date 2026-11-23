@@ -71,7 +71,7 @@ Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
 | `src/main/java/dk/itu/datasys/storage/PartitionFile.java` | Binary layout of one partition file (magic, version, offset table, column chunks). Only `readAllColumns` is open outside the package; `COPY` and `DELETE` write the files, so every file has a catalog entry. |
 | `src/main/java/dk/itu/datasys/storage/ValueCodec.java` | Encode/decode one `LONG` / `DOUBLE` / `STRING` value (little-endian). |
 | `src/main/java/dk/itu/datasys/storage/CsvParser.java` | Headerless positional CSV line → typed `Object[]`. |
-| `src/main/java/dk/itu/datasys/storage/ColumnStats.java` | Min, max, and distinct count over a column, and the comparator used for that type. `tableNdv` is the max of the partition counts. |
+| `src/main/java/dk/itu/datasys/storage/ColumnStats.java` | Min, max, and distinct count over a column, and the comparator used for that type. `tableNdv` is the max of the partition counts. A missing count counts as that partition's row count. |
 | `src/main/java/dk/itu/datasys/storage/Pruner.java` | Whether a partition’s `[min, max]` can contain a match. |
 
 ### Tests
@@ -215,6 +215,7 @@ flowchart TD
   Planner --> FilterOperator
   Planner --> RowPredicate
   Planner --> Pruner
+  Planner --> ColumnStats
   Planner --> StorageEngine
   Planner --> SelectStatement
   Planner --> ColumnResolver

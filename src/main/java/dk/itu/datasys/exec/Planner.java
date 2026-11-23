@@ -6,6 +6,7 @@ import dk.itu.datasys.sql.Predicate;
 import dk.itu.datasys.sql.SelectStatement;
 import dk.itu.datasys.storage.CatalogData;
 import dk.itu.datasys.storage.ColumnSpec;
+import dk.itu.datasys.storage.ColumnStats;
 import dk.itu.datasys.storage.ColumnType;
 import dk.itu.datasys.storage.Comparison;
 import dk.itu.datasys.storage.Pruner;
@@ -189,34 +190,17 @@ public final class Planner {
                     filterColumn, filter.comparison(), filter.constant(), column.type()));
             Object[] bounds = bounds(surviving, filter.columnName(), column.type());
             estimate = Estimator.filterRows(estimate, filter.comparison(), filter.constant(),
-                    bounds[0], bounds[1], columnNdv(surviving, filter.columnName()), column.type());
+                    bounds[0], bounds[1], ColumnStats.columnNdv(surviving, filter.columnName()), column.type());
         }
         return new TablePipeline(pipeline, stats, version, estimate, columnNdvs(surviving, columns));
     }
 
-    /** Max of the partition NDVs. A missing count is that partition's row count. */
     private static Map<String, Long> columnNdvs(List<CatalogData.Partition> partitions, List<ColumnSpec> columns) {
         Map<String, Long> ndv = new LinkedHashMap<>();
         for (ColumnSpec column : columns) {
-            ndv.put(column.name(), columnNdv(partitions, column.name()));
+            ndv.put(column.name(), ColumnStats.columnNdv(partitions, column.name()));
         }
         return Map.copyOf(ndv);
-    }
-
-    private static Long columnNdv(List<CatalogData.Partition> partitions, String column) {
-        if (partitions.isEmpty()) {
-            return 0L;
-        }
-        List<Long> counts = new ArrayList<>(partitions.size());
-        for (CatalogData.Partition partition : partitions) {
-            Long stored = partition.stats().get(column).ndv();
-            counts.add(stored == null ? (long) partition.rowCount() : stored);
-        }
-        long max = counts.getFirst();
-        for (Long count : counts) {
-            max = Math.max(max, count);
-        }
-        return max;
     }
 
     private static Object[] bounds(List<CatalogData.Partition> partitions, String column, ColumnType type) {

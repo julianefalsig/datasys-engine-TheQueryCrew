@@ -35,7 +35,7 @@ final class JoinOrder {
         for (int i = 1; i < fromOrder.size(); i++) {
             Card next = fromOrder.get(i);
             JoinPredicate predicate = onePredicate(predicatesBetween(group.tables, next.name(), predicates, columns),
-                    next.name(), group.tables);
+                    next.name(), group.tables, JoinMode.SYNTAX);
             double estRows = estimate(group, next, predicate, fromOrder, columns);
             joins.add(new Join(group.tables, List.of(next.name()),
                     columnOn(predicate, group.tables, columns), columnOn(predicate, List.of(next.name()), columns),
@@ -57,7 +57,8 @@ final class JoinOrder {
                 if (between.isEmpty()) {
                     continue;
                 }
-                JoinPredicate predicate = onePredicate(between, right.name(), List.of(left.name()));
+                JoinPredicate predicate = onePredicate(between, right.name(), List.of(left.name()),
+                        JoinMode.OPTIMIZED);
                 double estRows = Estimator.joinRows(left.rows(), right.rows(),
                         ndv(left, columnOn(predicate, List.of(left.name()), columns)),
                         ndv(right, columnOn(predicate, List.of(right.name()), columns)));
@@ -70,7 +71,7 @@ final class JoinOrder {
             }
         }
         if (first == null) {
-            throw crossProduct(fromOrder.get(1).name(), List.of(fromOrder.getFirst().name()));
+            throw crossProduct(JoinMode.OPTIMIZED, fromOrder.get(1).name(), List.of(fromOrder.getFirst().name()));
         }
         logCandidates(opening, first);
         JoinPredicate predicate = first.predicate;
@@ -85,6 +86,10 @@ final class JoinOrder {
                 columnOn(predicate, List.of(probe.name()), columns), first.estRows);
         List<Join> joins = new ArrayList<>();
         joins.add(openingJoin);
+        // Physical row order follows whoever builds. The log follows who was joined, so -j syntax can replay it.
+        List<String> joinedOrder = new ArrayList<>();
+        joinedOrder.add(build.name());
+        joinedOrder.add(probe.name());
         Group group = new Group(concat(openingJoin.buildTables, probe.name()), first.estRows);
 
         while (group.tables.size() < fromOrder.size()) {
@@ -98,7 +103,7 @@ final class JoinOrder {
                 if (between.isEmpty()) {
                     continue;
                 }
-                JoinPredicate nextPredicate = onePredicate(between, next.name(), group.tables);
+                JoinPredicate nextPredicate = onePredicate(between, next.name(), group.tables, JoinMode.OPTIMIZED);
                 double estRows = estimate(group, next, nextPredicate, fromOrder, columns);
                 Candidate candidate = new Candidate(group, next, nextPredicate, estRows);
                 round.add(candidate);
@@ -107,7 +112,7 @@ final class JoinOrder {
                 }
             }
             if (best == null) {
-                throw crossProduct(unconnected(fromOrder, group.tables), group.tables);
+                throw crossProduct(JoinMode.OPTIMIZED, unconnected(fromOrder, group.tables), group.tables);
             }
             logCandidates(round, best);
             boolean addedBuilds = builds(best.added.rows(), group.rows, indexOf(fromOrder, best.added.name()),
@@ -118,9 +123,10 @@ final class JoinOrder {
                     ? new Join(List.of(best.added.name()), group.tables, addedColumn, groupColumn, best.estRows)
                     : new Join(group.tables, List.of(best.added.name()), groupColumn, addedColumn, best.estRows);
             joins.add(join);
+            joinedOrder.add(best.added.name());
             group = new Group(concat(join.buildTables, join.probeTables), best.estRows);
         }
-        logChosen(JoinMode.OPTIMIZED, group.tables);
+        logChosen(JoinMode.OPTIMIZED, joinedOrder);
         return joins;
     }
 
@@ -176,9 +182,10 @@ final class JoinOrder {
         return predicate.rightColumn();
     }
 
-    private static JoinPredicate onePredicate(List<JoinPredicate> predicates, String added, List<String> joined) {
+    private static JoinPredicate onePredicate(List<JoinPredicate> predicates, String added, List<String> joined,
+            JoinMode mode) {
         if (predicates.isEmpty()) {
-            throw crossProduct(added, joined);
+            throw crossProduct(mode, added, joined);
         }
         if (predicates.size() > 1) {
             throw new IllegalArgumentException(
@@ -188,11 +195,12 @@ final class JoinOrder {
         return predicates.getFirst();
     }
 
-    private static IllegalArgumentException crossProduct(String added, List<String> joined) {
-        return new IllegalArgumentException(
-                "no join predicate connects " + added + " to " + joined
-                        + "; that would be a cross product, reorder the FROM list"
-                        + " so each new table joins one already listed");
+    private static IllegalArgumentException crossProduct(JoinMode mode, String added, List<String> joined) {
+        String message = "no join predicate connects " + added + " to " + joined + "; that would be a cross product";
+        if (mode == JoinMode.SYNTAX) {
+            message += ", reorder the FROM list so each new table joins one already listed";
+        }
+        return new IllegalArgumentException(message);
     }
 
     private static String unconnected(List<Card> fromOrder, List<String> joined) {

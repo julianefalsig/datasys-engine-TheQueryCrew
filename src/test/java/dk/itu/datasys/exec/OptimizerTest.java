@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -75,7 +76,32 @@ class OptimizerTest {
                 IllegalArgumentException.class,
                 () -> JoinOrder.greedy(cards(), List.of(new JoinPredicate("b_med", "m_id")), columns()));
         assertTrue(error.getMessage().contains("small"), error.getMessage());
-        assertTrue(error.getMessage().contains("reorder"), error.getMessage());
+        assertTrue(error.getMessage().contains("cross product"), error.getMessage());
+        assertFalse(error.getMessage().contains("reorder"), error.getMessage());
+    }
+
+    @Test
+    void theLoggedOrderIsTheOrderSyntaxCanReplay() throws IOException {
+        List<JoinOrder.Card> fromOrder = List.of(
+                new JoinOrder.Card("a", 10, Map.of("a_b", 10L)),
+                new JoinOrder.Card("b", 10, Map.of("b_id", 10L, "b_c", 2L)),
+                new JoinOrder.Card("c", 2, Map.of("c_id", 2L)));
+        List<JoinPredicate> predicates = List.of(
+                new JoinPredicate("a_b", "b_id"), new JoinPredicate("b_c", "c_id"));
+        ColumnResolver columns = new ColumnResolver(List.of("a", "b", "c"), List.of(
+                List.of(new ColumnSpec("a_b", ColumnType.LONG)),
+                List.of(new ColumnSpec("b_id", ColumnType.LONG), new ColumnSpec("b_c", ColumnType.LONG)),
+                List.of(new ColumnSpec("c_id", ColumnType.LONG))));
+
+        List<JoinOrder.Join> joins = JoinOrder.greedy(fromOrder, predicates, columns);
+        assertEquals(List.of("c"), joins.get(1).buildTables());
+        assertTrue(onlyLineContaining("statement=SELECT joinOrder=")[6].contains("joinOrder=a;b;c"));
+
+        JoinOrder.syntax(fromOrder, predicates, columns);
+        List<JoinOrder.Card> physical = List.of(fromOrder.get(2), fromOrder.get(0), fromOrder.get(1));
+        IllegalArgumentException rejected = assertThrows(IllegalArgumentException.class,
+                () -> JoinOrder.syntax(physical, predicates, columns));
+        assertTrue(rejected.getMessage().contains("reorder"), rejected.getMessage());
     }
 
     @Test

@@ -20,6 +20,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -207,6 +208,20 @@ class PlannerTest {
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () -> planner.plan(
                 new SelectStatement(List.of("orders", "products", "customers"), List.of(),
                         List.of(new JoinPredicate("o_custname", "c_name")))));
+
+        assertTrue(error.getMessage().contains("products"), error.getMessage());
+        assertTrue(error.getMessage().contains("cross product"), error.getMessage());
+        assertFalse(error.getMessage().contains("reorder"), error.getMessage());
+    }
+
+    @Test
+    void syntaxStillAsksToReorderAnUnconnectedFromList(@TempDir Path dataDir) throws IOException {
+        Planner planner = new Planner(engineWithJoinTables(dataDir));
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () -> planner.plan(
+                new SelectStatement(List.of("orders", "products", "customers"), List.of(),
+                        List.of(new JoinPredicate("o_custname", "c_name"))),
+                JoinMode.SYNTAX));
 
         assertTrue(error.getMessage().contains("products"), error.getMessage());
         assertTrue(error.getMessage().contains("reorder"), error.getMessage());

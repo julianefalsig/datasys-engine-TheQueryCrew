@@ -1,12 +1,13 @@
 package dk.itu.datasys.storage;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
 /** Per-column min, max, and distinct count over a list of values. */
-final class ColumnStats {
+public final class ColumnStats {
 
     final Object min;
     final Object max;
@@ -42,6 +43,22 @@ final class ColumnStats {
      * The same value can sit in several partitions, so the sum would over-count and the max cannot.
      * A lower bound makes |R| · |S| / ndv too large rather than too small.
      */
+    /**
+     * Table NDV for one column. A partition written before NDV existed contributes its row count,
+     * then {@link #tableNdv} takes the max.
+     */
+    public static long columnNdv(List<CatalogData.Partition> partitions, String column) {
+        if (partitions.isEmpty()) {
+            return 0L;
+        }
+        List<Long> counts = new ArrayList<>(partitions.size());
+        for (CatalogData.Partition partition : partitions) {
+            Long stored = partition.stats().get(column).ndv();
+            counts.add(stored == null ? (long) partition.rowCount() : stored);
+        }
+        return tableNdv(counts);
+    }
+
     static long tableNdv(List<Long> partitionNdvs) {
         if (partitionNdvs.isEmpty()) {
             throw new IllegalArgumentException("table NDV needs at least one partition");
