@@ -179,6 +179,29 @@ class StorageEngineIT {
         assertEquals(2L, partition.stats().get("o_quantity").ndv());
     }
 
+    // Anna,1 / Anna,2 / Bob,1. Deleting Bob leaves two Annas and both quantities, so only the name count drops.
+    @Test
+    void deleteRecalculatesNdvForTheRowsThatRemain(@TempDir Path dataDir) throws IOException {
+        StorageEngine engine = new StorageEngine(dataDir, 10);
+        engine.createTable("orders", List.of(
+                new ColumnSpec("o_custname", ColumnType.STRING),
+                new ColumnSpec("o_quantity", ColumnType.LONG)));
+        Path csv = dataDir.resolve("orders.csv");
+        Files.writeString(csv, """
+                Anna,1
+                Anna,2
+                Bob,1
+                """);
+        engine.copyFile("orders", csv.toString());
+
+        engine.delete("orders", "o_custname", Comparison.EQUALS, "Bob");
+
+        CatalogData.Partition partition = engine.catalog("orders").partitions.getFirst();
+        assertEquals(2, partition.rowCount());
+        assertEquals(1L, partition.stats().get("o_custname").ndv());
+        assertEquals(2L, partition.stats().get("o_quantity").ndv());
+    }
+
     @Test
     void pruning(@TempDir Path dataDir) throws IOException {
         StorageEngine engine = engineWithTrips(dataDir, "trips_sorted.csv");
