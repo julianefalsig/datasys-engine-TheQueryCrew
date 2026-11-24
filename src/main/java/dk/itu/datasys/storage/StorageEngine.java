@@ -413,9 +413,10 @@ public final class StorageEngine implements AutoCloseable {
         for (int c = 0; c < columnCount; c++) {
             ColumnSpec column = columns.get(c);
             ColumnStats stats = ColumnStats.of(columnData.get(c), column.type());
-            statsByColumn.put(column.name(), new CatalogData.Range(stats.min, stats.max));
-            LOGGER.debug("op={} table={} partition={} column={} min={} max={}",
-                    op, csvSafe(tableName), partitionIndex, csvSafe(column.name()), csvSafe(stats.min), csvSafe(stats.max));
+            statsByColumn.put(column.name(), new CatalogData.Range(stats.min, stats.max, stats.ndv));
+            LOGGER.debug("op={} table={} partition={} column={} min={} max={} rows={} ndv={}",
+                    op, csvSafe(tableName), partitionIndex, csvSafe(column.name()),
+                    csvSafe(stats.min), csvSafe(stats.max), partitionRows.size(), stats.ndv);
         }
         return new CatalogData.Partition(dataFileName, partitionRows.size(), statsByColumn);
     }

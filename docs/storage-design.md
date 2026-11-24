@@ -7,7 +7,7 @@
 2. **Catalog contents:** per table, at least the schema and the list of data files and partitions that belong to it.
 
     - schema as a list of column specifications (name + type)
-    - list of partition data files and their statistics
+    - list of partition data files and their statistics: per column, min, max, and `ndv`. A catalog written before `ndv` simply has no key; readers leave that count missing
     - configurable parameters as maxRowsPerPartition
     - a version number: 0 after CREATE TABLE, incremented by each committed COPY
     - `maxPartitionNumber`: the highest `partition-<n>.bin` index ever assigned, -1 when none have been. It stays put when a partition leaves the list, so the next COPY does not reuse a file name

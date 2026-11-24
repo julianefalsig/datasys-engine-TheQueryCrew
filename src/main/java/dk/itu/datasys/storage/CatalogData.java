@@ -1,5 +1,7 @@
 package dk.itu.datasys.storage;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -8,7 +10,7 @@ import java.util.Map;
 /**
  * The JSON-serializable contents of one table's catalog file: schema, partition size,
  * version, the highest partition number ever assigned, and the list of partitions with their
- * per-column min/max (catalog-only pruning, per storage-design.md).
+ * per-column min/max and NDV (catalog-only pruning, per storage-design.md).
  * {@code version} is 0 for an empty table from {@code CREATE TABLE}; each committed {@code COPY} or {@code DELETE}
  * writes the next one.
  * {@code maxPartitionNumber} is -1 until the first partition file is written, and it is not lowered when a
@@ -25,8 +27,16 @@ public final class CatalogData {
     public record Partition(String dataFile, int rowCount, Map<String, Range> stats) {
     }
 
-    /** min/max as JSON numbers or strings matching the column type. */
-    public record Range(Object min, Object max) {
+    /**
+     * min/max as JSON numbers or strings matching the column type.
+     * {@code ndv} is null when this partition was written before distinct counts existed;
+     * the estimate then uses the partition's row count.
+     */
+    public record Range(Object min, Object max, @JsonInclude(JsonInclude.Include.NON_NULL) Long ndv) {
+
+        public Range(Object min, Object max) {
+            this(min, max, null);
+        }
     }
 
     void coerceStats() {
@@ -41,7 +51,8 @@ public final class CatalogData {
                 }
                 stats.put(column.name(), new Range(
                         coerce(range.min(), column.type()),
-                        coerce(range.max(), column.type())));
+                        coerce(range.max(), column.type()),
+                        range.ndv()));
             }
             coerced.add(new Partition(partition.dataFile(), partition.rowCount(), stats));
         }
