@@ -3,6 +3,7 @@ package dk.itu.datasys.storage;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -80,5 +81,14 @@ class ColumnStatsTest {
     @Test
     void tableNdvRejectsAnEmptyList() {
         assertThrows(IllegalArgumentException.class, () -> ColumnStats.tableNdv(List.of()));
+    }
+
+    @Test
+    void aPartitionWithoutNdvCountsAsItsRowCount() {
+        CatalogData.Partition counted = new CatalogData.Partition("a.bin", 2,
+                Map.of("city", new CatalogData.Range("A", "B", 3L)));
+        CatalogData.Partition missing = new CatalogData.Partition("b.bin", 8,
+                Map.of("city", new CatalogData.Range("A", "C")));
+        assertEquals(8L, ColumnStats.columnNdv(List.of(counted, missing), "city"));
     }
 }

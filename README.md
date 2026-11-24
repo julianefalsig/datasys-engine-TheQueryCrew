@@ -46,10 +46,12 @@ Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
 | `src/main/java/dk/itu/datasys/exec/Operator.java` | Volcano pipeline contract: `open()`, `next()` until null, `close()`. |
 | `src/main/java/dk/itu/datasys/exec/ScanOperator.java` | Reads the partitions it is handed, in order. Sees no predicate and prunes nothing. |
 | `src/main/java/dk/itu/datasys/exec/FilterOperator.java` | Passes on the rows its predicate accepts; logs `rowsIn`/`rowsOut` on close. |
-| `src/main/java/dk/itu/datasys/exec/HashJoinOperator.java` | Inner equi-join: hashes the build child on `open()`, streams the probe child; each output row is build columns then probe columns. Logs `rowsBuild`/`rowsProbe`/`rowsOut` on close. |
+| `src/main/java/dk/itu/datasys/exec/HashJoinOperator.java` | Inner equi-join: hashes the build child on `open()`, streams the probe child; each output row is build columns then probe columns. A planned join logs `estRows` with `rowsBuild`/`rowsProbe`/`rowsOut` on close. |
 | `src/main/java/dk/itu/datasys/exec/Estimator.java` | Row-count estimates from catalog numbers only: base table, equality and range filters, equi-join. A missing NDV counts as the row count. |
+| `src/main/java/dk/itu/datasys/exec/JoinOrder.java` | Join sequence. `syntax` follows the FROM list. `greedy` starts at the smallest estimate and then adds the connected table with the smallest estimate. The smaller input builds. |
+| `src/main/java/dk/itu/datasys/exec/PermuteOperator.java` | Puts a reordered join's columns back into FROM-list order. |
 | `src/main/java/dk/itu/datasys/exec/Plan.java` | Planned SELECT: operator root, one `ScanStats` and one pinned catalog version per FROM table (`versions` follows the FROM list; `stats` is the leftmost table); `drain()` pulls all rows. |
-| `src/main/java/dk/itu/datasys/exec/Planner.java` | Bound SELECT → plan. One scan per table, pruned on that table's filters, then left-deep hash joins in `FROM` order (build = joined so far, probe = the next table). A table with no connecting predicate is rejected; the message asks to reorder the `FROM` list. A second equi-join predicate on the same added table is rejected too. |
+| `src/main/java/dk/itu/datasys/exec/Planner.java` | Bound SELECT → plan. One scan per table, pruned on that table's filters. `-j optimized` (the default) joins the smallest estimate first and builds the smaller input; `-j syntax` joins left to right in `FROM` order. Output columns stay in `FROM` order. A table with no connecting predicate is rejected, and so is a second equi-join predicate on the same added table. |
 | `src/main/java/dk/itu/datasys/exec/Executor.java` | `parse → bind → plan → execute` per statement; CREATE/COPY/DELETE call storage directly. Counts `statementNumber` into the MDC from 1, back to 0 when the script ends. Logs `create_complete`, `copy_complete`, `delete_complete`, and `select_complete` on success (parse/bind/execute timings; CREATE/COPY/DELETE log `version=`, SELECT logs `versions=` for every pinned table) and `statement_failed` on bind/operator errors. |
 
 ### `dk.itu.datasys.storage`
@@ -69,7 +71,7 @@ Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
 | `src/main/java/dk/itu/datasys/storage/PartitionFile.java` | Binary layout of one partition file (magic, version, offset table, column chunks). Only `readAllColumns` is open outside the package; `COPY` and `DELETE` write the files, so every file has a catalog entry. |
 | `src/main/java/dk/itu/datasys/storage/ValueCodec.java` | Encode/decode one `LONG` / `DOUBLE` / `STRING` value (little-endian). |
 | `src/main/java/dk/itu/datasys/storage/CsvParser.java` | Headerless positional CSV line → typed `Object[]`. |
-| `src/main/java/dk/itu/datasys/storage/ColumnStats.java` | Min, max, and distinct count over a column, and the comparator used for that type. `tableNdv` is the max of the partition counts. |
+| `src/main/java/dk/itu/datasys/storage/ColumnStats.java` | Min, max, and distinct count over a column, and the comparator used for that type. `tableNdv` is the max of the partition counts. A missing count counts as that partition's row count. |
 | `src/main/java/dk/itu/datasys/storage/Pruner.java` | Whether a partition’s `[min, max]` can contain a match. |
 
 ### Tests
@@ -95,7 +97,8 @@ Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
 | `src/test/java/dk/itu/datasys/exec/EstimatorTest.java` | Estimator on hand-made statistics: base table, equality and range filters (bounds, min = max, strings), joins, missing NDV. |
 | `src/test/java/dk/itu/datasys/exec/HashJoinOperatorTest.java` | Hash join over stub children: duplicates multiply, unmatched rows drop, empty build and probe sides. |
 | `src/test/java/dk/itu/datasys/exec/ScanOperatorTest.java` | Scan over real partition files, including the fully pruned empty-partition case. |
-| `src/test/java/dk/itu/datasys/exec/PlannerTest.java` | Planner shapes (Filter/Scan, left-deep hash joins) and per-table pruning `ScanStats`. An unconnected `FROM` list and a second equi-join predicate are rejected. |
+| `src/test/java/dk/itu/datasys/exec/PlannerTest.java` | Planner shapes (Filter/Scan, left-deep hash joins under `-j syntax`) and per-table pruning `ScanStats`. An unconnected `FROM` list and a second equi-join predicate are rejected. |
+| `src/test/java/dk/itu/datasys/exec/OptimizerTest.java` | Greedy order when the FROM list is the worst order, the smaller side builds, SELECT * stays in FROM order, and the log has `estRows` beside `rowsOut`. |
 | `src/test/java/dk/itu/datasys/exec/TestListOperator.java` | Test helper: a stub child operator serving rows from a list. |
 | `src/test/java/dk/itu/datasys/storage/TestPartitions.java` | Test helper: writes a partition file for tests outside the storage package. |
 
@@ -123,6 +126,10 @@ flowchart TD
     ScanOperator
     FilterOperator
     HashJoinOperator
+    PermuteOperator
+    Estimator
+    JoinOrder
+    JoinMode
     Plan
     Planner
     Executor
@@ -145,6 +152,7 @@ flowchart TD
     ColumnType
   end
   Engine --> Executor
+  Engine --> JoinMode
   Engine --> StorageEngine
   SqlParser --> SqlAstBuilder
   Binder --> Statement
@@ -182,6 +190,14 @@ flowchart TD
   ScanOperator --> Operator
   FilterOperator --> Operator
   HashJoinOperator --> Operator
+  PermuteOperator --> Operator
+  Estimator --> CatalogData
+  Estimator --> Pruner
+  Estimator --> Comparison
+  Estimator --> ColumnType
+  JoinOrder --> Estimator
+  JoinOrder --> JoinPredicate
+  JoinOrder --> ColumnResolver
   FilterOperator --> RowPredicate
   RowPredicate --> Comparison
   RowPredicate --> ColumnType
@@ -190,21 +206,27 @@ flowchart TD
   Plan --> Operator
   Plan --> ScanStats
   Planner --> Plan
+  Planner --> JoinMode
+  Planner --> JoinOrder
+  Planner --> Estimator
+  Planner --> PermuteOperator
   Planner --> HashJoinOperator
   Planner --> ScanOperator
   Planner --> FilterOperator
   Planner --> RowPredicate
   Planner --> Pruner
+  Planner --> ColumnStats
   Planner --> StorageEngine
   Planner --> SelectStatement
   Planner --> ColumnResolver
   Executor --> SqlParser
   Executor --> Binder
+  Executor --> JoinMode
   Executor --> Planner
   Executor --> StorageEngine
 ```
 
-`mvn package` writes `target/engine.jar`. `./engine` is the SQL front door: `-c` a statement or script, or `-f` a `.sql` file; SELECT rows as headerless CSV on stdout; storage under `data/`. `--max-rows-per-partition <n>` is the partition size `CREATE TABLE` stores (default 10000); `COPY` uses the value already in the catalog.
+`mvn package` writes `target/engine.jar`. `./engine` is the SQL front door: `-c` a statement or script, or `-f` a `.sql` file; SELECT rows as headerless CSV on stdout; storage under `data/`. `-j optimized` (the default) picks the join order; `-j syntax` follows the `FROM` list. `--max-rows-per-partition <n>` is the partition size `CREATE TABLE` stores (default 10000); `COPY` uses the value already in the catalog.
 
 ## System analysis
 

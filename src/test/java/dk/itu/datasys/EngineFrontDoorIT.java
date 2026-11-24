@@ -33,6 +33,15 @@ class EngineFrontDoorIT {
     // ---- In process -----------------------------------------------------------------------
 
     @Test
+    void joinFlagRejectsAnUnknownMode() {
+        ByteArrayOutputStream err = new ByteArrayOutputStream();
+        int code = Engine.run(new String[] {"-j", "bushy", "-c", "SELECT 1"}, temp,
+                new PrintStream(new ByteArrayOutputStream()), new PrintStream(err));
+        assertEquals(1, code);
+        assertTrue(err.toString(StandardCharsets.UTF_8).contains("optimized or syntax"));
+    }
+
+    @Test
     void commandFlagExecutesSql() throws IOException {
         Path csv = copyResource("trips.csv");
         String sql = """
