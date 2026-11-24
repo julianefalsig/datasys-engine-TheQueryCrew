@@ -32,7 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class JoinTestbedIT {
 
-    private static final Path LOAD = Path.of("examples", "20-load-multiple.sql");
+    static final Path LOAD = Path.of("examples", "20-load-multiple.sql");
     private static final Path QUERIES = Path.of("examples", "21-query-multiple.sql");
 
     // Hand-checked: every order finds its customer, product and city; 3 of the 4 orders are from Copenhagen.
