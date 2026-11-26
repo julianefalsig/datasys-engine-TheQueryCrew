@@ -5,6 +5,8 @@
 # Usage, from anywhere, after `mvn package` and generate-data.py:
 #   experiments/project_3/run-benchmark.sh
 #   REPS=7 CITY=city007 experiments/project_3/run-benchmark.sh
+#   DATA=experiments/project_3/data-skew RESULTS=experiments/project_3/results-skew \
+#       CITY=city000 experiments/project_3/run-benchmark.sh
 #
 # Every execution is a fresh JVM (cold JIT) over an OS page cache that the load and the earlier
 # runs have warmed. One extra run per configuration comes first and is discarded. The measured
@@ -18,7 +20,11 @@ set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
 WORK=$HERE/work
-RESULTS=$HERE/results
+DATA=${DATA:-$HERE/data}
+RESULTS=${RESULTS:-$HERE/results}
+# DATA and RESULTS may be given relative to the caller's cwd.
+DATA=$(cd "$DATA" && pwd)
+RESULTS=$(mkdir -p "$RESULTS" && cd "$RESULTS" && pwd)
 LOG=$WORK/logs/engine.log
 REPS=${REPS:-5}
 CITY=${CITY:-city042}
@@ -70,7 +76,8 @@ write_conditions() {
         java -version 2>&1
         echo "commit: $(git -C "$ROOT" rev-parse --short HEAD)"
         echo "ENGINE_JAVA_OPTS: ${ENGINE_JAVA_OPTS:-<jvm default>}"
-        echo "data: $(wc -l <"$HERE/data/customers.csv") customers, $(wc -l <"$HERE/data/orders.csv") orders, $(wc -l <"$HERE/data/shipments.csv") shipments"
+        echo "data: $(wc -l <"$DATA/customers.csv") customers, $(wc -l <"$DATA/orders.csv") orders, $(wc -l <"$DATA/shipments.csv") shipments"
+        echo "data directory: $DATA"
         echo "filter: c_city = '$CITY'"
         echo "repetitions: $REPS per configuration, after 1 discarded run; round-robin order"
         echo "each run: a fresh JVM (cold JIT), OS page cache warm"
@@ -79,14 +86,26 @@ write_conditions() {
 
 main() {
     [[ -f $ROOT/target/engine.jar ]] || { echo "missing target/engine.jar: run mvn package" >&2; exit 1; }
-    [[ -f $HERE/data/orders.csv ]] || { echo "missing data: run generate-data.py" >&2; exit 1; }
+    [[ -f $DATA/orders.csv ]] || { echo "missing $DATA/orders.csv: run generate-data.py" >&2; exit 1; }
 
     rm -rf "$WORK"
     mkdir -p "$WORK" "$RESULTS"
     write_conditions
 
+    # COPY paths are relative to work/. The default data directory resolves to ../data.
+    local rel
+    rel=$(python3 -c 'import os, sys; print(os.path.relpath(sys.argv[1], sys.argv[2]))' "$DATA" "$WORK")
+    cat >"$WORK/load.sql" <<EOF
+CREATE TABLE customers (c_name STRING, c_city STRING);
+CREATE TABLE orders (o_orderkey LONG, o_custname STRING, o_quantity LONG);
+CREATE TABLE shipments (s_shipkey LONG, s_custname STRING, s_weight DOUBLE);
+COPY customers FROM '$rel/customers.csv';
+COPY orders FROM '$rel/orders.csv';
+COPY shipments FROM '$rel/shipments.csv';
+EOF
+
     echo "loading the tables" >&2
-    engine /dev/null -f "$HERE/load-benchmark.sql"
+    engine /dev/null -f "$WORK/load.sql"
 
     local config name mode from rep result
     for config in "${CONFIGS[@]}"; do

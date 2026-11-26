@@ -1,2 +1,5 @@
 # The engine's scratch directory for a benchmark run; run-benchmark.sh recreates it.
 work/
+# Generated tables. The scripts reproduce them.
+data/
+data-skew/

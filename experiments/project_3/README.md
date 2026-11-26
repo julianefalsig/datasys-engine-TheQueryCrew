@@ -19,8 +19,7 @@ WHERE o_custname = s_custname AND s_custname = c_name AND c_city = 'city042';
 | File | Role |
 |---|---|
 | `generate-data.py` | Writes `data/customers.csv`, `orders.csv`, `shipments.csv` from a fixed seed. `data/` is gitignored; the script reproduces it. |
-| `load-benchmark.sql` | `CREATE TABLE` and `COPY` for the three tables. |
-| `run-benchmark.sh` | Loads the tables, runs every configuration, and writes `results/runs.csv` (session → configuration) and `results/conditions.txt`. Then runs `analysis.sql` through the engine. |
+| `run-benchmark.sh` | Writes the `CREATE TABLE` and `COPY` for whichever data directory is in use, runs every configuration, and writes `results/runs.csv` (session → configuration) and `results/conditions.txt`. Then runs `analysis.sql` through the engine. |
 | `analysis.sql` | Ingests the log and joins it with `runs.csv` in the engine: join lines, statement summaries, chosen join orders. |
 | `plot-results.py` | Reads the engine's analysis output and writes `results/runtime.{png,pdf}`, `results/runtime.csv` and `results/joins.md`. |
 
@@ -38,6 +37,31 @@ python3 experiments/project_3/plot-results.py
 
 `REPS` and `CITY` override the defaults: `REPS=7 CITY=city007 experiments/project_3/run-benchmark.sh`.
 To scale the data, pass `--customers` (a multiple of 100) and `--per-customer` to `generate-data.py`.
+
+## An alternate run, where the estimates are wrong
+
+`generate-data.py` makes `estRows` equal `rowsOut`: every customer has the same number of fact
+rows, and every city has the same number of customers, so `|R| · |S| / ndv` is the real
+intermediate. `generate-skewed-data.py` keeps the schema and the foreign keys, and drops that
+uniformity. A few customers own most of the orders and the shipments, and those customers sit in
+`city000`. The formulas still divide by the number of distinct names and the number of cities.
+
+Each table fits in one partition, and the keys are still shuffled, so the catalog NDV is the real
+NDV. The gap between `estRows` and `rowsOut` is the skew, not the partition-merge rule. Both
+estimates come out low. The filtered dimension is still the smaller intermediate, so `-j optimized`
+should keep choosing it; the finding is the size of the error, not a wrong plan.
+
+```bash
+python3 experiments/project_3/generate-skewed-data.py   # 200 customers, 8,000 orders, 8,000 shipments
+DATA=experiments/project_3/data-skew \
+    RESULTS=experiments/project_3/results-skew \
+    CITY=city000 \
+    experiments/project_3/run-benchmark.sh
+python3 experiments/project_3/plot-results.py experiments/project_3/results-skew
+```
+
+`CITY` has to be `city000`. Any other city is one of the small ones, and the equality estimate,
+which is the average city, is then too high instead of too low.
 
 ## Method
 
