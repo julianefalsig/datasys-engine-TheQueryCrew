@@ -53,3 +53,5 @@ target/
 
 # Engine data directory (default for Engine.main)
 data/
+
+__pycache__/
