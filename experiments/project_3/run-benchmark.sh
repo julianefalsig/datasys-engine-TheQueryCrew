@@ -5,7 +5,7 @@
 # Usage, from anywhere, after `mvn package` and generate-data.py:
 #   experiments/project_3/run-benchmark.sh
 #   REPS=7 CITY=city007 experiments/project_3/run-benchmark.sh
-#   DATA=experiments/project_3/data-skew RESULTS=experiments/project_3/results-skew \
+#   DATA=experiments/project_3/data-skew RESULTS=experiments/project_3/skewed_results \
 #       CITY=city000 experiments/project_3/run-benchmark.sh
 #
 # Every execution is a fresh JVM (cold JIT) over an OS page cache that the load and the earlier
@@ -126,13 +126,17 @@ EOF
 
     # The analysis, through the engine's own joins. Snapshot first: the engine writes to
     # engine.log while COPY reads it, and rotated files (engine-1.log, ...) are older lines.
+    # analysis.sql names ../results/runs.csv, which is only right for the default RESULTS.
     cat $(ls -r "$WORK"/logs/engine-*.log 2>/dev/null) "$LOG" >"$WORK/logs/snapshot.csv"
-    engine /dev/null -c "$(grep -v -e '^--' -e '^SELECT' "$HERE/analysis.sql")"
+    local runs_csv ddl
+    runs_csv=$(python3 -c 'import os, sys; print(os.path.relpath(sys.argv[1], sys.argv[2]))' "$RESULTS/runs.csv" "$WORK")
+    ddl=$(grep -v -e '^--' -e '^SELECT' "$HERE/analysis.sql" | sed "s|'../results/runs.csv'|'$runs_csv'|")
+    engine /dev/null -c "$ddl"
     local select class
     while IFS= read -r select; do
         class=$(sed -n "s/.*className = '\([A-Za-z]*\)'.*/\1/p" <<<"$select")
         engine "$RESULTS/analysis-$class.csv" -c "$select"
-        echo "wrote results/analysis-$class.csv ($(wc -l <"$RESULTS/analysis-$class.csv") rows)" >&2
+        echo "wrote $RESULTS/analysis-$class.csv ($(wc -l <"$RESULTS/analysis-$class.csv") rows)" >&2
     done < <(grep '^SELECT' "$HERE/analysis.sql")
 }
 

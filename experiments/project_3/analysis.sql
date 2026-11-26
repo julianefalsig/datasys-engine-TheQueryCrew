@@ -1,5 +1,6 @@
 -- The benchmark's analysis through the engine's own joins. Run from experiments/project_3/work,
--- after run-benchmark.sh has written logs/snapshot.csv and ../results/runs.csv.
+-- after run-benchmark.sh has written logs/snapshot.csv. The runner points the COPY below
+-- at whichever results directory is in use; the path here is the default, ../results/runs.csv.
 -- run-benchmark.sh runs each SELECT on its own, so each one gets its own output file.
 CREATE TABLE logs (timestamp STRING, sessionId STRING, statementNumber LONG, threadId LONG, logLevel STRING, className STRING, logMessage STRING);
 COPY logs FROM 'logs/snapshot.csv';

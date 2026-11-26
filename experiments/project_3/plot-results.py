@@ -142,6 +142,9 @@ def plot(by_config):
 
 
 def main():
+    global RESULTS
+    if len(sys.argv) > 1:
+        RESULTS = pathlib.Path(sys.argv[1])
     by_config = runtimes()
     write_runtime_csv(by_config)
     write_joins_md(joins(), join_orders())

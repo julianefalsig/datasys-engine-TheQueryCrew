@@ -22,7 +22,7 @@ so the catalog NDV is the real NDV. Whatever estRows and rowsOut disagree by is 
 Writes experiments/project_3/data-skew/{customers,orders,shipments}.csv and prints the uniform
 estimate next to the actual intermediate size. Run the benchmark with:
 
-    DATA=experiments/project_3/data-skew RESULTS=experiments/project_3/results-skew \\
+    DATA=experiments/project_3/data-skew RESULTS=experiments/project_3/skewed_results \\
         CITY=city000 experiments/project_3/run-benchmark.sh
 """
 

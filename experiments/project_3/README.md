@@ -54,10 +54,10 @@ should keep choosing it; the finding is the size of the error, not a wrong plan.
 ```bash
 python3 experiments/project_3/generate-skewed-data.py   # 200 customers, 8,000 orders, 8,000 shipments
 DATA=experiments/project_3/data-skew \
-    RESULTS=experiments/project_3/results-skew \
+    RESULTS=experiments/project_3/skewed_results \
     CITY=city000 \
     experiments/project_3/run-benchmark.sh
-python3 experiments/project_3/plot-results.py experiments/project_3/results-skew
+python3 experiments/project_3/plot-results.py experiments/project_3/skewed_results
 ```
 
 `CITY` has to be `city000`. Any other city is one of the small ones, and the equality estimate,
