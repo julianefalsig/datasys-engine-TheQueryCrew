@@ -80,6 +80,41 @@ class OptimizerTest {
         assertFalse(error.getMessage().contains("reorder"), error.getMessage());
     }
 
+    // FROM a, c, b with a–b and b–c. a × c would be the smallest result (1 · 1 = 1 row), but it is a
+    // cross product. a ⋈ b is 1 · 100 / max(1, 50) = 2 and c ⋈ b is 1 · 100 / max(1, 20) = 5, so a ⋈ b
+    // opens, and c joins last on b_c: 2 · 1 / max(20, 1) = 0.1.
+    @Test
+    void aCheaperCrossProductIsNeverPickedWhileAConnectedJoinExists() throws IOException {
+        List<JoinOrder.Card> fromOrder = List.of(
+                new JoinOrder.Card("a", 1, Map.of("a_b", 1L)),
+                new JoinOrder.Card("c", 1, Map.of("c_b", 1L)),
+                new JoinOrder.Card("b", 100, Map.of("b_a", 50L, "b_c", 20L)));
+        List<JoinPredicate> predicates = List.of(
+                new JoinPredicate("a_b", "b_a"), new JoinPredicate("c_b", "b_c"));
+        ColumnResolver columns = new ColumnResolver(List.of("a", "c", "b"), List.of(
+                List.of(new ColumnSpec("a_b", ColumnType.LONG)),
+                List.of(new ColumnSpec("c_b", ColumnType.LONG)),
+                List.of(new ColumnSpec("b_a", ColumnType.LONG), new ColumnSpec("b_c", ColumnType.LONG))));
+
+        List<JoinOrder.Join> joins = JoinOrder.greedy(fromOrder, predicates, columns);
+
+        assertEquals(2, joins.size());
+        assertEquals(List.of("a"), joins.get(0).buildTables());
+        assertEquals(List.of("b"), joins.get(0).probeTables());
+        assertEquals(2.0, joins.get(0).estRows());
+        assertEquals(List.of("c"), joins.get(1).buildTables());
+        assertEquals(List.of("a", "b"), joins.get(1).probeTables());
+        assertEquals(0.1, joins.get(1).estRows(), 1e-9);
+
+        // Not even estimated: the pair a, c is never a candidate in the log.
+        for (String line : Files.readAllLines(LOG_FILE)) {
+            String[] fields = line.split(",", -1);
+            if (fields.length == 7 && fields[1].equals(sessionId) && fields[6].startsWith("op=joinOrder")) {
+                assertFalse(fields[6].contains("candidate=a+c ") || fields[6].contains("candidate=c+a "), fields[6]);
+            }
+        }
+    }
+
     @Test
     void theLoggedOrderIsTheOrderSyntaxCanReplay() throws IOException {
         List<JoinOrder.Card> fromOrder = List.of(
