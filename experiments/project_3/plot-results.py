@@ -30,11 +30,12 @@ except ImportError:
 RESULTS = pathlib.Path("experiments/project_3/results")
 
 CONFIGS = ["min", "max", "optimized_min_from", "optimized_max_from"]
+# "small to big" is FROM customers, shipments, orders; "big to small" is FROM orders, shipments, customers.
 LABELS = {
-    "min": "min\n-j syntax\nFROM customers, shipments, orders",
-    "max": "max\n-j syntax\nFROM orders, shipments, customers",
-    "optimized_min_from": "optimized\nFROM customers, shipments, orders",
-    "optimized_max_from": "optimized\nFROM orders, shipments, customers",
+    "min": "syntax\nsmall to big",
+    "max": "syntax\nbig to small",
+    "optimized_min_from": "optimized\nsmall to big",
+    "optimized_max_from": "optimized\nbig to small",
 }
 
 # One measure, so one hue; the configuration is on the x axis, not in the color.
@@ -123,7 +124,7 @@ def plot(by_config):
         ax.scatter([x] * len(values), values, s=36, color=SERIES, edgecolor=SURFACE, linewidth=2, zorder=3)
         ax.annotate(f"{median:,.0f} ms", (x, median), xytext=(0, 6), textcoords="offset points",
                     ha="center", color=INK, fontsize=9)
-    ax.set_xticks(range(len(CONFIGS)), [LABELS[c] for c in CONFIGS], fontsize=8, color=INK_SECONDARY)
+    ax.set_xticks(range(len(CONFIGS)), [LABELS[c] for c in CONFIGS], fontsize=9, color=INK_SECONDARY)
     ax.set_ylabel("End-to-end runtime, durationMs (ms)", color=INK_SECONDARY)
     ax.set_ylim(bottom=0)
     ax.set_title("Join order: runtime per configuration (bar = median, dots = each run)", color=INK, fontsize=11)
