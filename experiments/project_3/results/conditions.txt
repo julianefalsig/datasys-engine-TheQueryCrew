@@ -1,4 +1,4 @@
-date: Thu Nov 26 10:43:12 CET 2026
+date: Thu Nov 26 11:41:50 CET 2026
 ProductName:		macOS
 ProductVersion:		15.6.1
 BuildVersion:		24G90
@@ -8,7 +8,7 @@ Apple M4
 openjdk version "25" 2025-09-16
 OpenJDK Runtime Environment (build 25+36-3489)
 OpenJDK 64-Bit Server VM (build 25+36-3489, mixed mode, sharing)
-commit: 9560da5
+commit: 4878f85
 ENGINE_JAVA_OPTS: -Xmx4g
 data:     1000 customers,   100000 orders,   100000 shipments
 filter: c_city = 'city042'
