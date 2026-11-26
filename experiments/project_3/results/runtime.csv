@@ -1,0 +1,5 @@
+config,runs,median_ms,min_ms,max_ms
+min,5,32,30,36
+max,5,394,360,644
+optimized_min_from,5,33,30,36
+optimized_max_from,5,37,36,38
