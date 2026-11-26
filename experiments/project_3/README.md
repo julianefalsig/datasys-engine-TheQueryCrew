@@ -22,7 +22,7 @@ WHERE o_custname = s_custname AND s_custname = c_name AND c_city = 'city042';
 | `load-benchmark.sql` | `CREATE TABLE` and `COPY` for the three tables. |
 | `run-benchmark.sh` | Loads the tables, runs every configuration, and writes `results/runs.csv` (session → configuration) and `results/conditions.txt`. Then runs `analysis.sql` through the engine. |
 | `analysis.sql` | Ingests the log and joins it with `runs.csv` in the engine: join lines, statement summaries, chosen join orders. |
-| `plot-results.py` | Reads the engine's analysis output and writes `results/runtime.{png,pdf}`, `results/runtime.csv` and `results/joins.md`. |
+| `plot-results.py` | Reads the engine's analysis output and writes `results/runtime.png`, `results/runtime-fast.png` (the three fast configurations, zoomed in), `results/runtime.csv` and `results/joins.md` (tables and a Mermaid chart of each plan). |
 
 ## Running it
 

@@ -7,7 +7,8 @@ Reads results/analysis-*.csv, which run-benchmark.sh wrote by joining the ingest
 runs.csv through the engine. Each row is the seven log fields followed by r_session, r_config and
 r_repetition. Writes:
 
-    results/runtime.{png,pdf}  end-to-end durationMs per configuration: every run as a dot, the median as a bar
+    results/runtime.png        end-to-end durationMs per configuration: every run as a dot, the median as a bar
+    results/runtime-fast.png   the same for the three configurations that run the min order, zoomed in
     results/runtime.csv        median, min and max durationMs per configuration
     results/joins.md           estRows against rowsOut per join and configuration, plus the chosen join order
 
@@ -111,7 +112,78 @@ def write_joins_md(join_rows, chosen):
         lines.append(f"| {config} | {number} | {tables} | {est} | {out:,} |")
     lines += ["", "| Configuration | Chosen join order |", "|---|---|"]
     lines += [f"| {config} | {chosen.get(config, '?')} |" for config in CONFIGS]
+    lines += ["", "Each plan once, with the configurations that ran it. Arrows carry estimated / actual rows.", ""]
+    lines += mermaid(join_rows)
     (RESULTS / "joins.md").write_text("\n".join(lines) + "\n")
+
+
+PLAN_TITLES = {
+    "min": "min",
+    "max": "max",
+    "optimized_min_from": "optimized (small to big)",
+    "optimized_max_from": "optimized (big to small)",
+}
+
+# The table the benchmark filters on; conditions.txt holds the filter itself.
+FILTERED_TABLE = "customers"
+
+
+def filter_text():
+    path = RESULTS / "conditions.txt"
+    if path.exists():
+        for line in path.read_text().splitlines():
+            if line.startswith("filter: "):
+                return line.removeprefix("filter: ")
+    return None
+
+
+def rows_label(est, out):
+    est = float(est)
+    est = f"{int(est):,}" if est.is_integer() else f"{est:,}"
+    return f"est {est} / actual {out:,}"
+
+
+def mermaid(join_rows):
+    """A left-deep plan per distinct join sequence, as a Mermaid flowchart.
+
+    A join line names the build side's tables, then the probe side's. The first join pairs two
+    tables, so the first one listed built. Every later join adds one table to the previous result;
+    if that new table is listed first, it built, and otherwise the previous result did.
+    """
+    plans = {}
+    for config in CONFIGS:
+        numbers = sorted(n for c, n in join_rows if c == config)
+        plans.setdefault(tuple(join_rows[(config, n)] for n in numbers), []).append(config)
+    condition = filter_text()
+
+    def table(plan_id, name):
+        label = f"{name}<br/>{condition}" if name == FILTERED_TABLE and condition else name
+        return f'{plan_id}_{name}["{label}"]'
+
+    lines = ["```mermaid", "flowchart LR"]
+    for p, (plan, configs) in enumerate(plans.items(), start=1):
+        plan_id = f"plan{p}"
+        title = ", ".join(PLAN_TITLES[c] for c in configs)
+        lines += [f'    subgraph {plan_id}["{title}"]', "        direction LR"]
+        joined = []
+        previous = None
+        for n, (tables, est, out) in enumerate(plan, start=1):
+            names = tables.split(", ")
+            join = f'{plan_id}_j{n}(("join {n}"))'
+            if previous is None:
+                lines.append(f'        {table(plan_id, names[0])} -->|"build"| {join}')
+                lines.append(f'        {table(plan_id, names[1])} -->|"probe"| {plan_id}_j{n}')
+            else:
+                added = next(name for name in names if name not in joined)
+                added_role, result_role = ("build", "probe") if names[0] == added else ("probe", "build")
+                lines.append(f'        {plan_id}_j{n - 1} -->|"{rows_label(*previous)}<br/>{result_role}"| {join}')
+                lines.append(f'        {table(plan_id, added)} -->|"{added_role}"| {plan_id}_j{n}')
+            joined = names
+            previous = (est, out)
+        lines.append(f'        {plan_id}_j{len(plan)} -->|"{rows_label(*previous)}"| {plan_id}_result["result"]')
+        lines.append("    end")
+    lines.append("```")
+    return lines
 
 
 def plot(by_config):
@@ -136,9 +208,50 @@ def plot(by_config):
         ax.spines[side].set_color(GRID)
     ax.tick_params(colors=INK_SECONDARY)
     fig.tight_layout()
-    for suffix in ("png", "pdf"):
-        fig.savefig(RESULTS / f"runtime.{suffix}", dpi=200)
-    print(f"wrote {RESULTS}/runtime.png and runtime.pdf")
+    fig.savefig(RESULTS / "runtime.png", dpi=200)
+    print(f"wrote {RESULTS}/runtime.png")
+
+
+FAST = ["min", "optimized_min_from", "optimized_max_from"]
+
+
+def plot_fast(by_config):
+    """The three configurations that run the min order, on their own axis so their spread is visible.
+
+    No bars: a bar must start at 0, and at 0 the few milliseconds between them would vanish. Each
+    run is a dot and the median a short line, so the y axis can zoom in on the range the runs cover.
+    """
+    fig, ax = plt.subplots(figsize=(6, 4), facecolor=SURFACE)
+    ax.set_facecolor(SURFACE)
+    every = [value for config in FAST for value in by_config[config]]
+    for x, config in enumerate(FAST):
+        values = by_config[config]
+        median = statistics.median(values)
+        ax.hlines(median, x - 0.2, x + 0.2, color=INK, linewidth=2, zorder=2)
+        # Runs are whole milliseconds, so ties are common: nudge a repeated value sideways to keep every dot visible.
+        seen = {}
+        xs = []
+        for value in values:
+            xs.append(x + 0.07 * seen.get(value, 0))
+            seen[value] = seen.get(value, 0) + 1
+        ax.scatter(xs, values, s=48, color=SERIES, edgecolor=SURFACE, linewidth=2, zorder=3)
+        ax.annotate(f"median {median:,.0f} ms", (x + 0.22, median), xytext=(4, 0), textcoords="offset points",
+                    va="center", color=INK, fontsize=9)
+    ax.set_xticks(range(len(FAST)), [LABELS[c] for c in FAST], fontsize=9, color=INK_SECONDARY)
+    ax.set_xlim(-0.5, len(FAST) - 0.2)
+    ax.set_ylim(min(every) - 3, max(every) + 3)
+    ax.set_ylabel("End-to-end runtime, durationMs (ms)", color=INK_SECONDARY)
+    ax.set_title("The three runs of the min order (line = median, dots = each run)", color=INK, fontsize=11)
+    ax.grid(axis="y", color=GRID, linewidth=0.8)
+    ax.set_axisbelow(True)
+    for side in ("top", "right"):
+        ax.spines[side].set_visible(False)
+    for side in ("left", "bottom"):
+        ax.spines[side].set_color(GRID)
+    ax.tick_params(colors=INK_SECONDARY)
+    fig.tight_layout()
+    fig.savefig(RESULTS / "runtime-fast.png", dpi=200)
+    print(f"wrote {RESULTS}/runtime-fast.png")
 
 
 def main():
@@ -146,6 +259,7 @@ def main():
     write_runtime_csv(by_config)
     write_joins_md(joins(), join_orders())
     plot(by_config)
+    plot_fast(by_config)
     for config in CONFIGS:
         values = by_config[config]
         print(f"{config}: median {statistics.median(values)} ms, min {min(values)}, max {max(values)}, runs {len(values)}")

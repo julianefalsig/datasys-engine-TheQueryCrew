@@ -16,23 +16,24 @@
 | optimized_min_from | customers, shipments, orders |
 | optimized_max_from | customers, shipments, orders |
 
+Each plan once, with the configurations that ran it. Arrows carry estimated / actual rows.
+
 ```mermaid
 flowchart LR
-    subgraph good["min, optimized (small to big), optimized (big to small)"]
+    subgraph plan1["min, optimized (small to big), optimized (big to small)"]
         direction LR
-        c1["customers<br/>c_city = 'city042'"] -->|"build"| j1(("join 1"))
-        s1["shipments"] -->|"probe"| j1
-        j1 -->|"est 1,000 / actual 1,000<br/>build"| j2(("join 2"))
-        o1["orders"] -->|"probe"| j2
-        j2 -->|"est 100,000 / actual 100,000"| r1["result"]
+        plan1_customers["customers<br/>c_city = 'city042'"] -->|"build"| plan1_j1(("join 1"))
+        plan1_shipments["shipments"] -->|"probe"| plan1_j1
+        plan1_j1 -->|"est 1,000 / actual 1,000<br/>build"| plan1_j2(("join 2"))
+        plan1_orders["orders"] -->|"probe"| plan1_j2
+        plan1_j2 -->|"est 100,000 / actual 100,000"| plan1_result["result"]
     end
-
-    subgraph bad["max: syntax, big to small"]
+    subgraph plan2["max"]
         direction LR
-        o2["orders"] -->|"build"| k1(("join 1"))
-        s2["shipments"] -->|"probe"| k1
-        k1 -->|"est 10,000,000 / actual 10,000,000<br/>build"| k2(("join 2"))
-        c2["customers<br/>c_city = 'city042'"] -->|"probe"| k2
-        k2 -->|"est 100,000 / actual 100,000"| r2["result"]
+        plan2_orders["orders"] -->|"build"| plan2_j1(("join 1"))
+        plan2_shipments["shipments"] -->|"probe"| plan2_j1
+        plan2_j1 -->|"est 10,000,000 / actual 10,000,000<br/>build"| plan2_j2(("join 2"))
+        plan2_customers["customers<br/>c_city = 'city042'"] -->|"probe"| plan2_j2
+        plan2_j2 -->|"est 100,000 / actual 100,000"| plan2_result["result"]
     end
 ```
