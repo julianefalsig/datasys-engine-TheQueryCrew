@@ -1,0 +1,17 @@
+date: Thu Nov 26 11:13:03 CET 2026
+ProductName:		macOS
+ProductVersion:		26.6.2
+BuildVersion:		25G83
+Apple M3
+8
+25769803776
+openjdk version "25.0.2" 2026-01-20
+OpenJDK Runtime Environment Homebrew (build 25.0.2)
+OpenJDK 64-Bit Server VM Homebrew (build 25.0.2, mixed mode, sharing)
+commit: 33a30b5
+ENGINE_JAVA_OPTS: -Xmx4g
+data:      200 customers,     8000 orders,     8000 shipments
+data directory: /Users/jonasson/Documents/MSc Computer Science/HowToBuildDataSystems/datasys-engine-TheQueryCrew/experiments/project_3/data-skew
+filter: c_city = 'city000'
+repetitions: 5 per configuration, after 1 discarded run; round-robin order
+each run: a fresh JVM (cold JIT), OS page cache warm
